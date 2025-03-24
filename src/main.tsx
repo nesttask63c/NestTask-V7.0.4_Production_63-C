@@ -72,6 +72,33 @@ const prefetchCriticalResources = () => {
           storeName: STORES.ROUTINES
         },
         options: { priority: 'high' as const }
+      },
+      // Add prefetch for courses and teachers to support Routine page in offline mode
+      { 
+        type: 'api' as const, 
+        key: 'courses', 
+        loader: {
+          tableName: 'courses',
+          queryFn: (query: any) => query.select('*'),
+          storeName: STORES.COURSES
+        },
+        options: { priority: 'medium' as const }
+      },
+      { 
+        type: 'api' as const, 
+        key: 'teachers', 
+        loader: {
+          tableName: 'teachers',
+          queryFn: (query: any) => query.select('*'),
+          storeName: STORES.TEACHERS
+        },
+        options: { priority: 'medium' as const }
+      },
+      { 
+        type: 'asset' as const, 
+        key: 'offline', 
+        loader: '/offline.html',
+        options: { priority: 'low' as const }
       }
     ];
     

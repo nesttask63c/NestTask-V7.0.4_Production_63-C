@@ -43,7 +43,9 @@ export function useTeachers() {
         const data = await fetchTeachers();
         setTeachers(data);
         
-        // No longer saving to IndexedDB for admin dashboard
+        // Save teachers to IndexedDB for offline use
+        console.log('Saving teachers to IndexedDB for offline access');
+        await saveToIndexedDB(STORES.TEACHERS, data);
       }
     } catch (err: any) {
       console.error('Error loading teachers:', err);

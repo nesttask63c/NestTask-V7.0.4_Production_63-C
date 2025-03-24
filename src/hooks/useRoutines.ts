@@ -38,20 +38,54 @@ export function useRoutines() {
         // When offline, get routines from IndexedDB
         console.log('Offline mode: Loading routines from IndexedDB');
         const offlineRoutines = await getAllFromIndexedDB(STORES.ROUTINES);
+        
+        // Also load courses and teachers from IndexedDB for offline support
+        const offlineCourses = await getAllFromIndexedDB(STORES.COURSES);
+        const offlineTeachers = await getAllFromIndexedDB(STORES.TEACHERS);
+        
+        console.log('Offline data loaded:', {
+          routines: offlineRoutines?.length || 0,
+          courses: offlineCourses?.length || 0,
+          teachers: offlineTeachers?.length || 0
+        });
+        
         if (offlineRoutines && offlineRoutines.length > 0) {
-          console.log('Found offline routines:', offlineRoutines.length);
-          setRoutines(offlineRoutines);
+          // Make sure slots have courseName and teacherName properties for offline use
+          const routinesWithNames = offlineRoutines.map(routine => {
+            if (!routine.slots) return routine;
+            
+            return {
+              ...routine,
+              slots: routine.slots.map((slot: RoutineSlot) => {
+                // Find teacher and course by ID
+                const course = slot.courseId ? offlineCourses?.find(c => c.id === slot.courseId) : undefined;
+                const teacher = slot.teacherId ? offlineTeachers?.find(t => t.id === slot.teacherId) : undefined;
+                
+                // Make sure we have courseName and teacherName
+                return {
+                  ...slot,
+                  courseName: slot.courseName || (course ? course.name : ''),
+                  teacherName: slot.teacherName || (teacher ? teacher.name : '')
+                };
+              })
+            };
+          });
+          
+          console.log('Found offline routines with names populated:', routinesWithNames.length);
+          setRoutines(routinesWithNames);
         } else {
           console.log('No offline routines found');
           setRoutines([]);
         }
       } else {
-        // Always fetch fresh data, no caching for admin dashboard
-        console.log('Admin dashboard: Always fetching fresh routine data');
+        // Always fetch fresh data online
+        console.log('Online mode: Fetching fresh routine data');
         const data = await fetchRoutines();
         setRoutines(data);
         
-        // No longer saving to IndexedDB for admin dashboard
+        // Save routines to IndexedDB for offline use
+        console.log('Saving routines to IndexedDB for offline access');
+        await saveToIndexedDB(STORES.ROUTINES, data);
       }
     } catch (err: any) {
       console.error('Error loading routines:', err);

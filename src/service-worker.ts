@@ -45,6 +45,7 @@ const URLS_TO_CACHE = [
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
+  '/offline.html',
 ];
 
 // Cache critical static assets with a Cache First strategy
@@ -240,6 +241,40 @@ registerRoute(
       new ExpirationPlugin({
         maxEntries: 100,
         maxAgeSeconds: 12 * 60 * 60, // 12 hours
+        purgeOnQuotaError: true // Delete old entries when cache is full
+      }),
+    ],
+  })
+);
+
+// Add specific caching for Supabase REST API endpoints used by the Routine page
+registerRoute(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ({ url }: { url: any }) => {
+    // Skip unsupported URL schemes
+    if (url.protocol === 'chrome-extension:' || 
+        url.protocol === 'chrome:' ||
+        url.protocol === 'edge:' ||
+        url.protocol === 'brave:') {
+      return false;
+    }
+    
+    // Match Supabase endpoints for routines, courses, and teachers
+    return (url.pathname.includes('/rest/v1/routines') || 
+            url.pathname.includes('/rest/v1/routine_slots') ||
+            url.pathname.includes('/rest/v1/courses') ||
+            url.pathname.includes('/rest/v1/teachers')) &&
+           url.searchParams.get('apikey') !== null;
+  },
+  new StaleWhileRevalidate({
+    cacheName: 'supabase-api-v2',
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 200,
+        maxAgeSeconds: 24 * 60 * 60, // 24 hours
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],

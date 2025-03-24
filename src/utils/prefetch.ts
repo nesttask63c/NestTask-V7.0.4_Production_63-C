@@ -4,7 +4,7 @@ import { lazyLoad, preloadComponent } from './lazyLoad';
 
 // Type for prefetch options
 export interface PrefetchOptions {
-  priority?: 'high' | 'low';
+  priority?: 'high' | 'medium' | 'low';
   timeout?: number;
   keepAlive?: boolean;
 }
@@ -104,8 +104,9 @@ export const prefetchResources = async (resources: Array<{
 }>) => {
   // Sort by priority (high first)
   const sortedResources = [...resources].sort((a, b) => {
-    const aPriority = a.options?.priority === 'high' ? 1 : 0;
-    const bPriority = b.options?.priority === 'high' ? 1 : 0;
+    const priorityMap = { 'high': 2, 'medium': 1, 'low': 0 };
+    const aPriority = priorityMap[a.options?.priority || 'low'];
+    const bPriority = priorityMap[b.options?.priority || 'low'];
     return bPriority - aPriority;
   });
   

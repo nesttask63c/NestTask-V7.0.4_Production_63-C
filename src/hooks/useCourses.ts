@@ -55,7 +55,9 @@ export function useCourses() {
         const data = await fetchCourses();
         setCourses(data);
         
-        // No longer saving to IndexedDB for admin dashboard
+        // Save courses to IndexedDB for offline use
+        console.log('Saving courses to IndexedDB for offline access');
+        await saveToIndexedDB(STORES.COURSES, data);
       }
     } catch (err: any) {
       console.error('Error loading courses:', err);
@@ -99,7 +101,9 @@ export function useCourses() {
         const data = await fetchStudyMaterials();
         setMaterials(data);
         
-        // No longer saving to IndexedDB for admin dashboard
+        // Save materials to IndexedDB for offline use
+        console.log('Saving materials to IndexedDB for offline access');
+        await saveToIndexedDB(STORES.MATERIALS, data);
       }
     } catch (err: any) {
       console.error('Error loading materials:', err);
