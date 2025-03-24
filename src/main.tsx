@@ -201,7 +201,7 @@ performance.mark('react-mount-start');
 // Render the app with minimal suspense delay and initialize loading state in DOM
 root.render(
   <StrictMode>
-    <Suspense fallback={<LoadingScreen minimumLoadTime={300} />}>
+    <Suspense fallback={<LoadingScreen minimumLoadTime={1200} showProgress={true} />}>
       <App />
       <Analytics />
     </Suspense>
@@ -210,13 +210,47 @@ root.render(
 
 // Add reliable cleanup for loading screen
 window.addEventListener('load', () => {
+  // Measure the actual load time
+  const loadTime = performance.now() - startTime;
+  console.debug(`App loaded in ${loadTime.toFixed(2)}ms`);
+  
+  // Delay loading screen removal to ensure the app is fully rendered
+  // React Suspense might still be showing fallback even after window load
   setTimeout(() => {
-    const loadingScreen = document.querySelector('.loading');
+    const loadingScreen = document.querySelector('.loading') as HTMLElement;
     if (loadingScreen) {
-      loadingScreen.remove();
+      // Inspect the root element to see if React has mounted
+      const rootElement = document.getElementById('root');
+      if (rootElement && rootElement.childNodes.length === 0) {
+        // React hasn't mounted yet, don't remove the loading screen
+        console.debug('React not mounted yet, keeping loading screen');
+        return;
+      }
+      
+      // Add a fade-out effect before removing
+      loadingScreen.style.transition = 'opacity 0.3s ease-out';
+      loadingScreen.style.opacity = '0';
+      
+      // Remove from DOM after transition completes
+      setTimeout(() => {
+        loadingScreen.remove();
+      }, 300);
     }
-  }, 800);
+  }, 300); // Wait to ensure React has fully hydrated the DOM
 });
+
+// Preload other routes after initial render to improve navigation speed
+setTimeout(() => {
+  // Preload common routes in the background after main interface is visible
+  const routesToPreload = [
+    import('./pages/UpcomingPage'),
+    import('./pages/SearchPage')
+  ];
+  
+  Promise.all(routesToPreload)
+    .then(() => console.debug('Background routes preloaded'))
+    .catch(err => console.warn('Error preloading routes:', err));
+}, 2000);
 
 // Measure and log render completion time
 performance.measure('react-mount', 'react-mount-start');

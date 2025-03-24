@@ -1,6 +1,32 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Run theme detection before anything else loads
+      try {
+        // Get stored theme - match same key used in useTheme hook
+        const savedTheme = localStorage.getItem('dark-mode');
+        
+        // Check if user has explicitly chosen a theme
+        if (savedTheme === 'false' || savedTheme === null) {
+          document.documentElement.classList.remove('dark');
+        } 
+        else if (savedTheme === 'true') {
+          document.documentElement.classList.add('dark');
+        }
+        // Only use system preference if no explicit choice
+        else {
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (prefersDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      } catch (e) {
+        console.error('Theme initialization error:', e);
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0284c7" />
@@ -26,161 +52,222 @@
       /* Critical path CSS */
       :root {
         --primary-color: #0284c7;
-        --error-color: #ef4444;
-        --success-color: #10b981;
+        --primary-light: rgba(2, 132, 199, 0.3);
         --bg-color: #ffffff;
         --text-color: #1e293b;
-        --border-color: #e2e8f0;
-        --placeholder-color: #94a3b8;
       }
       
       html, body {
         margin: 0;
         padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-          Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         background-color: var(--bg-color);
         color: var(--text-color);
         -webkit-font-smoothing: antialiased;
         height: 100%;
       }
       
-      /* Loading screen styles */
+      /* Modern loading screen styles */
       .loading {
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        inset: 0;
         display: flex;
         align-items: center;
         justify-content: center;
         background-color: var(--bg-color);
         z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.2s ease-out;
       }
       
-      .spinner {
-        width: 50px;
-        height: 50px;
-        border: 4px solid rgba(2, 132, 199, 0.1);
+      .loading-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .loading-title {
+        font-size: 1.1rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-top: 1rem;
+        color: var(--text-color);
+        opacity: 0.9;
+      }
+      
+      /* Modern pulse loader */
+      .loader {
+        position: relative;
+        width: 30px;
+        height: 30px;
+      }
+      
+      .loader::before {
+        content: "";
+        position: absolute;
+        inset: 0;
         border-radius: 50%;
-        border-top-color: var(--primary-color);
-        animation: spinner 0.8s linear infinite;
+        background-color: var(--primary-color);
+        opacity: 0.15;
+        transform: scale(1);
+        animation: pulse 1.5s ease-out infinite;
       }
       
-      @keyframes spinner {
-        to {
-          transform: rotate(360deg);
-        }
+      .loader::after {
+        content: "";
+        position: absolute;
+        inset: 8px;
+        border-radius: 50%;
+        background-color: var(--primary-color);
+        transform: scale(1);
+        opacity: 1;
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(0.8); opacity: 0.3; }
+        50% { transform: scale(1.15); opacity: 0.1; }
+        100% { transform: scale(0.8); opacity: 0.3; }
       }
       
       /* Dark mode support */
       .dark {
         --bg-color: #0f172a;
         --text-color: #e2e8f0;
-        --border-color: #334155;
-        --placeholder-color: #64748b;
-      }
-      
-      .dark .loading {
-        background-color: var(--bg-color);
+        --primary-color: #38bdf8;
+        --primary-light: rgba(56, 189, 248, 0.3);
       }
     </style>
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- Theme controller script -->
+    <script>
+      // Create global theme controller
+      window.themeController = {
+        isDark: function() {
+          return document.documentElement.classList.contains('dark');
+        },
+        setDark: function() {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('dark-mode', 'true');
+        },
+        setLight: function() {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('dark-mode', 'false');
+        },
+        toggle: function() {
+          if (this.isDark()) {
+            this.setLight();
+            return 'light';
+          } else {
+            this.setDark();
+            return 'dark';
+          }
+        },
+        // Match system preference
+        resetToSystem: function() {
+          localStorage.removeItem('dark-mode');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (prefersDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+          return prefersDark ? 'dark' : 'light';
+        }
+      };
+      
+      // Backwards compatibility
+      window.toggleTheme = window.themeController.toggle.bind(window.themeController);
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <div class="loading">
-      <div class="spinner"></div>
+      <div class="loading-content">
+        <div class="loader"></div>
+        <div class="loading-title">NestTask</div>
+      </div>
     </div>
     
     <script type="module" src="/src/main.tsx"></script>
     
     <script>
-      // Check for dark mode preference
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-      }
+      // Watch for dark mode changes in the system
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+        // Only apply system preference if no user choice is stored
+        if (!localStorage.getItem('dark-mode')) {
+          if (event.matches) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      });
     
       // Register service worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/service-worker.js')
-            .then(registration => {
-              // Service worker registration successful
-            })
             .catch(err => {
               console.error('ServiceWorker registration failed: ', err);
             });
         });
       }
       
-      // Cache warming function
-      function warmCache() {
-        if ('caches' in window) {
-          // Warm up API routes that will be needed immediately
-          caches.open('api-responses-v2').then(cache => {
-            // Prefetch critical API data
-            if (navigator.onLine) {
-              const authStatus = fetch('/api/auth/status', { method: 'GET', credentials: 'same-origin' })
-                .then(response => {
-                  if (response.ok) {
-                    cache.put('/api/auth/status', response.clone());
-                  }
-                  return response;
-                })
-                .catch(() => {});
+      // Improved loading screen removal with MutationObserver
+      document.addEventListener('DOMContentLoaded', () => {
+        // Get the root element where React will mount
+        const rootEl = document.getElementById('root');
+        
+        // Keep track of whether the app is mounted
+        let appMounted = false;
+        
+        // Observe the root element for changes to detect when React has mounted
+        if (rootEl) {
+          const observer = new MutationObserver((mutations, observer) => {
+            // Check if the app is mounted and has real content
+            if (rootEl.childNodes.length > 0 && rootEl.innerHTML.trim().length > 50) {
+              appMounted = true;
+              
+              // Delay the removal of loading screen slightly to ensure smooth transition
+              setTimeout(() => {
+                const loadingEl = document.querySelector('.loading');
+                if (loadingEl) {
+                  loadingEl.style.opacity = '0';
+                  setTimeout(() => {
+                    loadingEl.remove();
+                    observer.disconnect();
+                  }, 250);
+                }
+              }, 100); // Small delay to ensure React has rendered completely
             }
           });
+          
+          // Configure the observer to check for childList and subtree changes
+          observer.observe(rootEl, { 
+            childList: true, 
+            subtree: true,
+            characterData: true,
+            attributes: true 
+          });
         }
-      }
-      
-      // Instant loading optimizations - start early execution
-      document.addEventListener('DOMContentLoaded', () => {
-        // Start important requests early
-        const earlyPrefetch = () => {
-          try {
-            // Detect supported features for instant loading
-            const supportsDataCache = 'caches' in window;
-            const supportsIdleCallback = 'requestIdleCallback' in window;
-            
-            // Add priority hints to the main render
-            if (navigator.connection && navigator.connection.effectiveType === '4g') {
-              // For high-speed connections, aggressively preload
-              const criticalLinks = document.querySelectorAll('link[rel="preload"]');
-              criticalLinks.forEach(link => {
-                link.setAttribute('fetchpriority', 'high');
-              });
-            }
-            
-            if (supportsIdleCallback) {
-              // Delayed less-important operations
-              window.requestIdleCallback(() => {
-                warmCache();
-              }, { timeout: 2000 });
-            } else {
-              // Fallback for browsers without idle callback
-              setTimeout(warmCache, 1000);
-            }
-          } catch (err) {
-            console.warn('Error in early prefetching:', err);
-          }
-        };
         
-        // Start early optimization
-        earlyPrefetch();
-        
-        // Remove loading screen when React is initialized
-        const rootEl = document.getElementById('root');
-        if (rootEl && rootEl.childNodes.length > 0) {
-          const loadingEl = document.querySelector('.loading');
-          if (loadingEl) {
-            loadingEl.remove();
+        // Enhanced failsafe: Make sure loading screen is removed if observer fails
+        setTimeout(() => {
+          // Only remove loading if app hasn't mounted yet
+          if (!appMounted) {
+            console.debug('Using failsafe to remove loading screen');
+            const loadingEl = document.querySelector('.loading');
+            if (loadingEl) {
+              loadingEl.style.opacity = '0';
+              setTimeout(() => {
+                loadingEl.remove();
+              }, 250);
+            }
           }
-        }
+        }, 3000); // Longer timeout to give app more time to initialize
       });
     </script>
   </body>

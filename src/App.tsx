@@ -97,6 +97,27 @@ export default function App() {
     }
   }, [predictedPages]);
 
+  // Preload critical assets in the background - MOVED HERE to ensure consistent hook ordering
+  useEffect(() => {
+    if (!isLoading && user) {
+      // Preload critical task-related assets after authentication
+      prefetchResources([
+        {
+          type: 'route',
+          key: 'upcoming',
+          loader: importUpcomingPage,
+          options: { priority: 'high' }
+        },
+        {
+          type: 'route',
+          key: 'search',
+          loader: importSearchPage,
+          options: { priority: 'medium' }
+        }
+      ]);
+    }
+  }, [isLoading, user]);
+
   // Calculate today's task count - always compute this value regardless of rendering path
   const todayTaskCount = useMemo(() => {
     if (!tasks || tasks.length === 0) return 0;
@@ -159,6 +180,22 @@ export default function App() {
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 800); // Reduced from 2000ms to 800ms
+
+    // Immediately prefetch critical resources for better performance
+    prefetchResources([
+      {
+        type: 'route',
+        key: 'upcoming',
+        loader: importUpcomingPage,
+        options: { priority: 'high' }
+      },
+      {
+        type: 'asset',
+        key: 'logo',
+        loader: '/icons/icon-192x192.png',
+        options: { priority: 'high' }
+      }
+    ]);
 
     // Check hash on initial load
     checkHashForRecovery();
@@ -424,7 +461,7 @@ export default function App() {
 
   // Early returns based on loading state and authentication
   if (isLoading || authLoading || (user?.role === 'admin' && usersLoading)) {
-    return <LoadingScreen minimumLoadTime={300} />;
+    return <LoadingScreen minimumLoadTime={1000} showProgress={true} />;
   }
 
   // Handle password reset flow
@@ -503,7 +540,7 @@ export default function App() {
         )}
         
         {tasksLoading ? (
-          <LoadingScreen minimumLoadTime={300} />
+          <LoadingScreen minimumLoadTime={500} showProgress={false} />
         ) : (
           renderContent()
         )}

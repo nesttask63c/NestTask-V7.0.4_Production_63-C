@@ -10,7 +10,11 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { user } = useAuth();
   const [darkMode, setDarkMode] = useState(() => {
-    return JSON.parse(localStorage.getItem('dark-mode') || 'false');
+    const saved = localStorage.getItem('dark-mode');
+    // Handle both string 'true'/'false' and serialized JSON boolean values
+    if (saved === 'true') return true;
+    if (saved === 'false') return false;
+    return saved ? JSON.parse(saved) : false;
   });
 
   useEffect(() => {
