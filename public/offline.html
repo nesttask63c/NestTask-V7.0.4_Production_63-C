@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NestTask - Offline</title>
+  <link rel="icon" type="image/svg+xml" href="/icons/favicon.ico" />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      max-width: 500px;
+      background-color: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #4f46e5;
+      margin-bottom: 10px;
+    }
+    p {
+      line-height: 1.6;
+      margin-bottom: 20px;
+      color: #666;
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    .button {
+      background-color: #4f46e5;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .button:hover {
+      background-color: #4338ca;
+    }
+    .info {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📶</div>
+    <h1>You're Offline</h1>
+    <p>Don't worry! NestTask has saved your recent tasks and routines. You can still view your previously loaded content.</p>
+    <p>Some features may be limited until your connection is restored.</p>
+    <button class="button" onclick="window.location.reload()">Try Again</button>
+    <div class="info">
+      <p>If you were previously logged in, you can still access your cached tasks and routines.</p>
+    </div>
+  </div>
+
+  <script>
+    // Check if we're back online
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>

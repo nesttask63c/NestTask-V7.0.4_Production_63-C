@@ -1,0 +1,16 @@
+# Dependencies
+node_modules
+
+# Build files
+.git
+.github
+.gitignore
+README.md
+.eslintrc
+.editorconfig
+*.log
+
+# Development files
+.vscode
+.idea
+*.test.* 

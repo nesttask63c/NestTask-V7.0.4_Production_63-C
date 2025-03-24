@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0284c7" />
+    <meta name="description" content="NestTask - A modern task management application for teams and individuals" />
+    <base href="/" />
+    
+    <!-- Resource hints for faster loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://supabase.io" crossorigin />
+    <link rel="preconnect" href="https://api.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    <link rel="dns-prefetch" href="https://api.supabase.co" />
+    
+    <!-- PWA assets -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon-192x192.png" />
+    <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    
+    <!-- Critical CSS inline for faster paint -->
+    <style>
+      /* Critical path CSS */
+      :root {
+        --primary-color: #0284c7;
+        --error-color: #ef4444;
+        --success-color: #10b981;
+        --bg-color: #ffffff;
+        --text-color: #1e293b;
+        --border-color: #e2e8f0;
+        --placeholder-color: #94a3b8;
+      }
+      
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+          Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        overscroll-behavior-y: none;
+        -webkit-font-smoothing: antialiased;
+        height: 100%;
+      }
+      
+      /* Loading screen styles */
+      .loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--bg-color);
+        z-index: 9999;
+      }
+      
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(2, 132, 199, 0.1);
+        border-radius: 50%;
+        border-top-color: var(--primary-color);
+        animation: spinner 0.8s linear infinite;
+      }
+      
+      @keyframes spinner {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
+      /* Dark mode support */
+      .dark {
+        --bg-color: #0f172a;
+        --text-color: #e2e8f0;
+        --border-color: #334155;
+        --placeholder-color: #64748b;
+      }
+      
+      .dark .loading {
+        background-color: var(--bg-color);
+      }
+    </style>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <div class="loading">
+      <div class="spinner"></div>
+    </div>
+    
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <script>
+      // Check for dark mode preference
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+      }
+    
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => {
+              // Service worker registration successful
+            })
+            .catch(err => {
+              console.error('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+      
+      // Cache warming function
+      function warmCache() {
+        if ('caches' in window) {
+          // Warm up API routes that will be needed immediately
+          caches.open('api-responses-v2').then(cache => {
+            // Prefetch critical API data
+            if (navigator.onLine) {
+              const authStatus = fetch('/api/auth/status', { method: 'GET', credentials: 'same-origin' })
+                .then(response => {
+                  if (response.ok) {
+                    cache.put('/api/auth/status', response.clone());
+                  }
+                  return response;
+                })
+                .catch(() => {});
+            }
+          });
+        }
+      }
+      
+      // Instant loading optimizations - start early execution
+      document.addEventListener('DOMContentLoaded', () => {
+        // Start important requests early
+        const earlyPrefetch = () => {
+          try {
+            // Detect supported features for instant loading
+            const supportsDataCache = 'caches' in window;
+            const supportsIdleCallback = 'requestIdleCallback' in window;
+            
+            // Add priority hints to the main render
+            if (navigator.connection && navigator.connection.effectiveType === '4g') {
+              // For high-speed connections, aggressively preload
+              const criticalLinks = document.querySelectorAll('link[rel="preload"]');
+              criticalLinks.forEach(link => {
+                link.setAttribute('fetchpriority', 'high');
+              });
+            }
+            
+            if (supportsIdleCallback) {
+              // Delayed less-important operations
+              window.requestIdleCallback(() => {
+                warmCache();
+              }, { timeout: 2000 });
+            } else {
+              // Fallback for browsers without idle callback
+              setTimeout(warmCache, 1000);
+            }
+          } catch (err) {
+            console.warn('Error in early prefetching:', err);
+          }
+        };
+        
+        // Start early optimization
+        earlyPrefetch();
+        
+        // Remove loading screen when React is initialized
+        const rootEl = document.getElementById('root');
+        if (rootEl && rootEl.childNodes.length > 0) {
+          const loadingEl = document.querySelector('.loading');
+          if (loadingEl) {
+            loadingEl.remove();
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

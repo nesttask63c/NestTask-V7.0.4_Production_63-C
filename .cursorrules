@@ -1,0 +1,171 @@
+# Instructions
+
+During your interaction with the user, if you find anything reusable in this project (e.g. version of a library, model name), especially about a fix to a mistake you made or a correction you received, you should take note in the `Lessons` section in the `.cursorrules` file so you will not make the same mistake again. 
+
+You should also use the `.cursorrules` file as a Scratchpad to organize your thoughts. Especially when you receive a new task, you should first review the content of the Scratchpad, clear old different task if necessary, first explain the task, and plan the steps you need to take to complete the task. You can use todo markers to indicate the progress, e.g.
+[X] Task 1
+[ ] Task 2
+
+Also update the progress of the task in the Scratchpad when you finish a subtask.
+Especially when you finished a milestone, it will help to improve your depth of task accomplishment to use the Scratchpad to reflect and plan.
+The goal is to help you maintain a big picture as well as the progress of the task. Always refer to the Scratchpad when you plan the next step.
+
+# Tools
+
+Note all the tools are in python. So in the case you need to do batch processing, you can always consult the python files and write your own script.
+
+## Screenshot Verification
+
+The screenshot verification workflow allows you to capture screenshots of web pages and verify their appearance using LLMs. The following tools are available:
+
+1. Screenshot Capture:
+```bash
+venv/bin/python tools/screenshot_utils.py URL [--output OUTPUT] [--width WIDTH] [--height HEIGHT]
+```
+
+2. LLM Verification with Images:
+```bash
+venv/bin/python tools/llm_api.py --prompt "Your verification question" --provider {openai|anthropic} --image path/to/screenshot.png
+```
+
+Example workflow:
+```python
+from screenshot_utils import take_screenshot_sync
+from llm_api import query_llm
+
+# Take a screenshot
+
+screenshot_path = take_screenshot_sync('https://example.com', 'screenshot.png')
+
+# Verify with LLM
+
+response = query_llm(
+    "What is the background color and title of this webpage?",
+    provider="openai",  # or "anthropic"
+    image_path=screenshot_path
+)
+print(response)
+```
+
+## LLM
+
+You always have an LLM at your side to help you with the task. For simple tasks, you could invoke the LLM by running the following command:
+```
+venv/bin/python ./tools/llm_api.py --prompt "What is the capital of France?" --provider "anthropic"
+```
+
+The LLM API supports multiple providers:
+- OpenAI (default, model: gpt-4o)
+- Azure OpenAI (model: configured via AZURE_OPENAI_MODEL_DEPLOYMENT in .env file, defaults to gpt-4o-ms)
+- DeepSeek (model: deepseek-chat)
+- Anthropic (model: claude-3-sonnet-20240229)
+- Gemini (model: gemini-pro)
+- Local LLM (model: Qwen/Qwen2.5-32B-Instruct-AWQ)
+
+But usually it's a better idea to check the content of the file and use the APIs in the `tools/llm_api.py` file to invoke the LLM if needed.
+
+## Web browser
+
+You could use the `tools/web_scraper.py` file to scrape the web.
+```
+venv/bin/python ./tools/web_scraper.py --max-concurrent 3 URL1 URL2 URL3
+```
+This will output the content of the web pages.
+
+## Search engine
+
+You could use the `tools/search_engine.py` file to search the web.
+```
+venv/bin/python ./tools/search_engine.py "your search keywords"
+```
+This will output the search results in the following format:
+```
+URL: https://example.com
+Title: This is the title of the search result
+Snippet: This is a snippet of the search result
+```
+If needed, you can further use the `web_scraper.py` file to scrape the web page content.
+
+# Lessons
+
+## User Specified Lessons
+
+- You have a python venv in ./venv. Use it.
+- Include info useful for debugging in the program output.
+- Read the file before you try to edit it.
+- Due to Cursor's limit, when you use `git` and `gh` and need to submit a multiline commit message, first write the message in a file, and then use `git commit -F <filename>` or similar command to commit. And then remove the file. Include "[Cursor] " in the commit message and PR title.
+
+## Cursor learned
+
+- For search results, ensure proper handling of different character encodings (UTF-8) for international queries
+- Add debug information to stderr while keeping the main output clean in stdout for better pipeline integration
+- When using seaborn styles in matplotlib, use 'seaborn-v0_8' instead of 'seaborn' as the style name due to recent seaborn version changes
+- Use 'gpt-4o' as the model name for OpenAI's GPT-4 with vision capabilities
+- When implementing UI features, prioritize validation for better user experience
+- Include confirmation dialogs for destructive actions like deletion
+- Use pagination for lists that may grow large over time
+- Add search and filtering functionality to make data management more efficient
+- For database delete operations with foreign key relationships, use a robust transaction approach with error handling
+- Always check database responses and use explicit selects after delete operations to verify success
+- Invalidate cache and force state refresh after critical operations like deletion to ensure UI consistency 
+- Add detailed logging for database operations to aid in debugging production issues
+- Implement optimistic UI updates for better user experience (update UI first, then try database operations)
+- When handling deletion operations, always update local cache/state immediately even if the backend operation fails
+- Use error boundaries in UI components to prevent entire application crashes from localized errors
+- Admin dashboard doesn't need caching or saving to IndexedDB - fetch fresh data each time to ensure admins always see the latest information
+
+# Scratchpad
+
+Task: Enhance the Teacher Management functionality to make it more professional
+
+[X] Analyze the current Teacher Management implementation to identify areas for improvement
+[X] Enhance TeacherManager component
+  [X] Add statistical dashboard showing teacher count, departments, etc.
+  [X] Add filtering and sorting options
+  [X] Add department distribution visualization chart
+  [X] Implement course assignment statistics
+  [X] Add advanced search functionality
+  [X] Add export functionality (CSV and printable reports)
+  [X] Improve overall UI with professional styling
+[X] Improve TeacherForm component
+  [X] Add form validation for required fields and proper formatting
+  [X] Make the form collapsible for better space management
+  [X] Improve UI styling and user feedback
+  [X] Implement modern course selection dropdown with search
+[X] Enhance TeacherList component
+  [X] Implement pagination for better handling of large teacher lists
+  [X] Add better search functionality with clear button
+  [X] Add confirmation dialog for teacher deletion
+[X] Upgrade TeacherEditModal component
+  [X] Add validation for form fields
+  [X] Create a more intuitive course selection interface with search functionality
+  [X] Add better styling and user feedback during form submission
+[X] Implement Bulk Teacher Import functionality
+  [X] Create BulkTeacherImport component with JSON file upload
+  [X] Add validation for JSON structure and teacher data
+  [X] Implement preview of teachers to be imported
+  [X] Add error handling and success reporting
+  [X] Integrate with TeacherManager component
+[X] Fix teacher deletion functionality
+  [X] Update deleteTeacher function to handle foreign key relationships
+  [X] Add proper error handling during deletion
+  [X] Implement toast notifications for user feedback
+  [X] Fix z-index issues for delete confirmation modal
+
+Key improvements completed:
+- Fixed type errors between component interfaces and hook implementations
+- Added a professional statistics dashboard with department visualizations
+- Implemented comprehensive filtering, sorting and advanced search options
+- Added bulk import functionality for efficient teacher data management
+- Improved UX with pagination, confirmations, and responsive design 
+- Enhanced form validation and error handling throughout
+- Implemented modern course selection interface with search and dropdown
+- Added data export features (CSV download and printable reports)
+- Improved UI with more professional styling and intuitive interactions
+- Fixed teacher deletion functionality by properly handling database relationships
+- Added a robust toast notification system for better user feedback throughout the application
+- Improved error handling and user feedback during all CRUD operations
+
+The Teacher Management system now offers administrators a professional, efficient interface for managing teacher data with powerful data analysis capabilities and export options.
+
+Task completed ✅
