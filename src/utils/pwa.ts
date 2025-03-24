@@ -167,7 +167,8 @@ export async function initPWA() {
   // Initialize features in parallel
   const results = await Promise.allSettled([
     Promise.resolve().then(checkInstallability),
-    Promise.resolve().then(registerServiceWorker)
+    Promise.resolve().then(registerServiceWorker),
+    Promise.resolve().then(setupNativePullToRefresh)
   ]);
   
   // Log any errors but don't block the app
@@ -178,6 +179,13 @@ export async function initPWA() {
   });
   
   return true;
+}
+
+// Set up native pull-to-refresh functionality
+export function setupNativePullToRefresh() {
+  // Don't do anything special - the browser's native pull-to-refresh is now enabled
+  // This function exists for clarity and future enhancement if needed
+  console.log('Native pull-to-refresh is enabled');
 }
 
 // Helper function to convert VAPID key

@@ -850,7 +850,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.15 }}
-                  className="p-3 sm:p-4 pb-4 sm:pb-6 max-h-[250px] overflow-y-auto overscroll-contain"
+                  className="p-3 sm:p-4 pb-4 sm:pb-6 max-h-[250px] overflow-y-auto"
                 >
                   <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
                     {years.map(year => (
@@ -879,7 +879,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="calendar-container overscroll-contain"
+                  className="calendar-container"
                   onTouchStart={(e) => {
                     // Only handle touch events at container level if not on a button
                     if (!(e.target as HTMLElement).closest('button')) {

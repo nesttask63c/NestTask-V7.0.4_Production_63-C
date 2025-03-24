@@ -168,7 +168,18 @@ export default function App() {
       checkHashForRecovery();
     };
     
+    // Handle page visibility changes (for pull-to-refresh)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refresh data when page becomes visible after refresh
+        if (user?.id) {
+          refreshTasks();
+        }
+      }
+    };
+    
     window.addEventListener('hashchange', handleHashChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Listen for auth state changes, including password recovery
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -181,8 +192,9 @@ export default function App() {
       clearTimeout(timer);
       subscription.unsubscribe();
       window.removeEventListener('hashchange', handleHashChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [checkHashForRecovery]);
+  }, [checkHashForRecovery, refreshTasks, user?.id]);
 
   // Handle syncing all offline changes when coming back online
   const syncAllOfflineChanges = async () => {
