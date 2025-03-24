@@ -168,7 +168,8 @@ export async function initPWA() {
   const results = await Promise.allSettled([
     Promise.resolve().then(checkInstallability),
     Promise.resolve().then(registerServiceWorker),
-    Promise.resolve().then(setupNativePullToRefresh)
+    Promise.resolve().then(setupNativePullToRefresh),
+    Promise.resolve().then(disableZoom)
   ]);
   
   // Log any errors but don't block the app
@@ -186,6 +187,29 @@ export function setupNativePullToRefresh() {
   // Don't do anything special - the browser's native pull-to-refresh is now enabled
   // This function exists for clarity and future enhancement if needed
   console.log('Native pull-to-refresh is enabled');
+}
+
+// Disable zoom functionality on mobile devices
+export function disableZoom() {
+  // Prevent pinch zoom by handling touchmove events
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+  
+  // Prevent double-tap zoom
+  let lastTapTime = 0;
+  document.addEventListener('touchend', (e) => {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTapTime;
+    if (tapLength < 300 && tapLength > 0) {
+      e.preventDefault();
+    }
+    lastTapTime = currentTime;
+  }, { passive: false });
+  
+  console.log('Zoom disabled on mobile devices');
 }
 
 // Helper function to convert VAPID key

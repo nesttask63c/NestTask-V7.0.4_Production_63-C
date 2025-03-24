@@ -17,6 +17,12 @@
   .non-passive-touch {
     touch-action: none;
   }
+  
+  /* Disable zoom for entire app */
+  html, body {
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
+  }
 }
 
 /* Mobile touch improvements */
