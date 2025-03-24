@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { TaskForm } from './task/TaskForm';
-import { TaskTable } from './task/TaskTable';
-import { TaskStats } from './task/TaskStats';
+import { TaskForm } from './TaskForm';
+import { TaskTable } from './TaskTable';
+import { TaskStats } from './TaskStats';
 import { 
   Plus, 
   ChevronUp, 
@@ -13,14 +13,14 @@ import {
   Search,
   X
 } from 'lucide-react';
-import type { Task } from '../../types';
-import type { NewTask } from '../../types/task';
+import type { Task } from '../../../types';
+import type { NewTask } from '../../../types/task';
 
 interface TaskManagerProps {
   tasks: Task[];
   onCreateTask: (task: NewTask) => void;
   onDeleteTask: (taskId: string) => void;
-  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
+  onUpdateTask: (taskId: string, task: Partial<Task>) => void;
 }
 
 export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }: TaskManagerProps) {
@@ -106,20 +106,22 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
   };
 
   return (
-    <div className="space-y-6 px-2 sm:px-0">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center justify-start gap-2">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Task Management</h2>
+        
+        <div className="flex flex-wrap gap-2">
           <button
-            className="flex-1 sm:flex-none px-3 py-2.5 sm:py-2 sm:px-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-base font-medium shadow-sm whitespace-nowrap"
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2"
             onClick={() => setShowTaskForm(!showTaskForm)}
           >
-            {showTaskForm ? <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />}
+            {showTaskForm ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             {showTaskForm ? 'Hide Form' : 'Create Task'}
           </button>
           
           <button
             className={`
-              flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm sm:text-base
+              px-4 py-2 rounded-xl flex items-center gap-2 transition-colors
               ${showFilters ? 
                 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 
                 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}
@@ -127,12 +129,12 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter className="w-4 h-4" />
-            <span className="sm:inline">Filters</span>
+            Filters
           </button>
           
-          <div className="relative flex-1 sm:flex-none group">
+          <div className="relative">
             <button
-              className="w-full px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+              className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-xl flex items-center gap-2 transition-colors"
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
             >
               {sortOrder === 'asc' ? (
@@ -140,10 +142,10 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
               ) : (
                 <SortDesc className="w-4 h-4" />
               )}
-              <span className="sm:inline">Sort</span>
+              Sort
             </button>
             
-            <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden z-10 border border-gray-200 dark:border-gray-700 hidden group-hover:block group-focus-within:block">
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden z-10 border border-gray-200 dark:border-gray-700 hidden group-hover:block">
               <div className="p-2">
                 <button
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm ${
@@ -182,19 +184,19 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
           </div>
           
           <button
-            className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+            className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-xl flex items-center gap-2 transition-colors"
             onClick={exportToCSV}
           >
             <Download className="w-4 h-4" />
-            <span className="sm:inline">Export</span>
+            Export
           </button>
         </div>
       </div>
 
       {showFilters && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-3 sm:p-4 md:p-6 space-y-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 md:p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white">Filter Tasks</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Filter Tasks</h3>
             <button 
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
               onClick={() => setShowFilters(false)}
@@ -203,7 +205,7 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
             </button>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Search
@@ -214,7 +216,7 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search tasks..."
-                  className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                  className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 {searchTerm && (
@@ -235,7 +237,7 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full px-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                className="w-full px-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value="all">All Categories</option>
                 <option value="assignment">Assignment</option>
@@ -262,7 +264,7 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                className="w-full px-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value="all">All Statuses</option>
                 <option value="my-tasks">To Do</option>
@@ -293,19 +295,16 @@ export function TaskManager({ tasks, onCreateTask, onDeleteTask, onUpdateTask }:
         <TaskForm onSubmit={onCreateTask} />
       )}
 
-      <div className="flex flex-col xl:grid xl:grid-cols-3 gap-4 md:gap-6">
-        {/* Task Analytics - shown first on mobile, but in the right column on desktop */}
-        <div className="order-first xl:order-last">
-          <TaskStats tasks={tasks} />
-        </div>
-        
-        {/* Task Table - shown second on mobile, but in the left/main column on desktop */}
-        <div className="order-last xl:order-first xl:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
           <TaskTable 
             tasks={sortedTasks} 
             onDeleteTask={onDeleteTask} 
             onUpdateTask={onUpdateTask} 
           />
+        </div>
+        <div>
+          <TaskStats tasks={tasks} />
         </div>
       </div>
     </div>
