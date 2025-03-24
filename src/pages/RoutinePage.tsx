@@ -145,12 +145,6 @@ export function RoutinePage() {
         <p className="text-gray-500 dark:text-gray-400 mb-4">
           {error}
         </p>
-        {isOffline && (
-          <div className="flex items-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 p-3 rounded-lg mb-4">
-            <WifiOff className="w-5 h-5 mr-2" />
-            <span>You are currently offline. Some features may be limited.</span>
-          </div>
-        )}
       </div>
     );
   }
@@ -163,25 +157,12 @@ export function RoutinePage() {
         <p className="text-gray-500 dark:text-gray-400 mb-4">
           There are no active routines at the moment.
         </p>
-        {isOffline && (
-          <div className="flex items-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 p-3 rounded-lg">
-            <WifiOff className="w-5 h-5 mr-2" />
-            <span>You are currently offline. Try again when you're back online.</span>
-          </div>
-        )}
       </div>
     );
   }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-      {isOffline && (
-        <div className="flex items-center bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 p-3 rounded-lg mb-4">
-          <WifiOff className="w-5 h-5 mr-2" />
-          <span>You are currently offline. Viewing cached data.</span>
-        </div>
-      )}
-    
       <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg mb-4 sm:mb-6 p-3 sm:p-4 shadow-sm">
         <div className="flex flex-col space-y-3 md:hidden">
           <div className="flex items-center justify-between">
