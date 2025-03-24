@@ -23,6 +23,7 @@
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.5.2",
     "react-intersection-observer": "^9.15.1",
+    "react-pull-to-refresh": "^2.0.1",
     "react-router-dom": "^7.3.0",
     "react-select": "^5.10.1",
     "react-virtualized": "^9.22.6",
