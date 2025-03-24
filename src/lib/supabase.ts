@@ -147,6 +147,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     flowType: 'pkce',
     storage: getCustomStorage(),
+    storageKey: 'nesttask_supabase_auth',
   },
   global: {
     headers: {
@@ -161,17 +162,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10
     }
-  },
-  // Add retry configuration with exponential backoff
-  fetch: (url, options = {}) => {
-    // Add a unique cache buster for authenticated requests to avoid stale data
-    const urlObj = new URL(url);
-    if (options.headers && 
-        (options.headers as Record<string, string>)['Authorization']) {
-      urlObj.searchParams.set('_cb', Date.now().toString());
-    }
-    
-    return fetchWithRetry(urlObj.toString(), options);
   }
 });
 
