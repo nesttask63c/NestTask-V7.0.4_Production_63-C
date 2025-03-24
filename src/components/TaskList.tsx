@@ -282,6 +282,28 @@ export function TaskList({ tasks, onDeleteTask, showDeleteButton = false }: Task
                     </span>
                   </div>
 
+                  {/* Due date display */}
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className={`w-3.5 h-3.5 md:w-3 md:h-3
+                      ${overdue
+                        ? 'text-red-500 dark:text-red-400'
+                        : task.status === 'completed'
+                          ? 'text-green-500 dark:text-green-400'
+                          : 'text-gray-500 dark:text-gray-400'}`} 
+                    />
+                    <span className={`text-sm md:text-xs font-medium
+                      ${overdue
+                        ? 'text-red-600 dark:text-red-400'
+                        : task.status === 'completed'
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-gray-600 dark:text-gray-400'}`}
+                    >
+                      {new Date(task.dueDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Mobile-only touch feedback */}
@@ -299,10 +321,7 @@ export function TaskList({ tasks, onDeleteTask, showDeleteButton = false }: Task
       {selectedTask && (
         <TaskDetailsPopup
           task={selectedTask}
-          tasks={sortedTasks}
           onClose={() => setSelectedTask(null)}
-          onDelete={onDeleteTask}
-          showDeleteButton={showDeleteButton}
         />
       )}
     </div>
