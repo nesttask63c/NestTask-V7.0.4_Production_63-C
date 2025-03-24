@@ -1011,6 +1011,21 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                               </motion.div>
                             )}
                             
+                            {/* Status indicator dots - display colored dots for different statuses */}
+                            {summary.total > 0 && !isSelected && (
+                              <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex gap-1 justify-center">
+                                {summary.completed > 0 && (
+                                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500"></div>
+                                )}
+                                {summary.overdue > 0 && (
+                                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500"></div>
+                                )}
+                                {summary.inProgress > 0 && (
+                                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500"></div>
+                                )}
+                              </div>
+                            )}
+                            
                             {/* Selected/Today Indicator Ring - only rendered when needed */}
                             {(isTodayDate && !isSelected) && (
                               <div
