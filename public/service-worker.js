@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nesttask-v2';
+const CACHE_NAME = 'nesttask-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to cache on install
@@ -11,8 +11,14 @@ const STATIC_ASSETS = [
   '/icons/icon-512x512.png',
   '/icons/add-task.png',
   '/icons/view-tasks.png',
-  // Cache additional assets for UI
-  '/icons/badge.png'
+  '/icons/badge.png',
+  // Add core app routes HTML
+  '/home',
+  '/upcoming',
+  '/search',
+  '/routine',
+  '/courses',
+  '/profile'
 ];
 
 // Dynamic assets that should be cached during runtime
@@ -24,6 +30,29 @@ const RUNTIME_CACHE_PATTERNS = [
   /^https:\/\/fonts\.gstatic\.com/ // Google fonts files
 ];
 
+// Create sync queues for different operations
+let taskQueue, routineQueue, courseTeacherQueue;
+
+// Initialize background sync if supported
+function initBackgroundSync() {
+  if ('sync' in self.registration) {
+    // Create queues for different types of operations
+    taskQueue = new workbox.backgroundSync.Queue('taskQueue', {
+      maxRetentionTime: 24 * 60 // Retry for up to 24 hours (in minutes)
+    });
+    
+    routineQueue = new workbox.backgroundSync.Queue('routineQueue', {
+      maxRetentionTime: 24 * 60
+    });
+    
+    courseTeacherQueue = new workbox.backgroundSync.Queue('courseTeacherQueue', {
+      maxRetentionTime: 24 * 60
+    });
+    
+    console.log('Background sync initialized');
+  }
+}
+
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -32,6 +61,15 @@ self.addEventListener('install', (event) => {
     })
   );
   self.skipWaiting();
+  
+  // Initialize background sync if available
+  if ('workbox' in self) {
+    try {
+      initBackgroundSync();
+    } catch (error) {
+      console.error('Error initializing background sync:', error);
+    }
+  }
 });
 
 // Activate event - clean up old caches
@@ -74,10 +112,69 @@ function shouldCacheAtRuntime(url) {
   }
 }
 
+// SPA Routes to handle with the app router
+const SPA_ROUTES = [
+  '/home',
+  '/upcoming',
+  '/search',
+  '/notifications',
+  '/courses',
+  '/study-materials',
+  '/routine',
+  '/admin',
+  '/settings',
+  '/profile',
+];
+
 // Fetch event - stale-while-revalidate strategy for assets, network-first for API
 self.addEventListener('fetch', (event) => {
-  // Handle non-GET requests
-  if (event.request.method !== 'GET') return;
+  // Handle non-GET requests with background sync for offline support
+  if (event.request.method !== 'GET') {
+    // Process API requests for background sync when offline
+    if (
+      event.request.url.includes('/api/tasks') || 
+      event.request.url.includes('/api/routines') || 
+      event.request.url.includes('/api/courses') || 
+      event.request.url.includes('/api/teachers')
+    ) {
+      // Only use background sync if offline and queues are available
+      if (!self.navigator.onLine && 'workbox' in self) {
+        const url = new URL(event.request.url);
+        
+        // Choose the appropriate queue based on the API endpoint
+        let queue;
+        if (url.pathname.includes('/tasks')) {
+          queue = taskQueue;
+        } else if (url.pathname.includes('/routines')) {
+          queue = routineQueue;
+        } else if (url.pathname.includes('/courses') || url.pathname.includes('/teachers')) {
+          queue = courseTeacherQueue;
+        }
+        
+        // Add to queue if available
+        if (queue) {
+          event.respondWith(
+            fetch(event.request.clone())
+              .catch((error) => {
+                console.log('Queuing failed request for background sync', error);
+                queue.pushRequest({ request: event.request });
+                return new Response(JSON.stringify({ 
+                  status: 'queued',
+                  message: 'Request queued for background sync'
+                }), {
+                  headers: { 'Content-Type': 'application/json' },
+                  status: 202
+                });
+              })
+          );
+          return;
+        }
+      }
+    }
+    
+    // For other non-GET requests, proceed normally
+    return;
+  }
 
   try {
     const url = new URL(event.request.url);
@@ -94,6 +191,29 @@ self.addEventListener('fetch', (event) => {
     // Skip Supabase API requests (let them go to network)
     if (url.hostname.includes('supabase.co')) {
       return;
+    }
+
+    // Special handling for SPA routes - always serve index.html
+    if (event.request.mode === 'navigate') {
+      const isSpaRoute = SPA_ROUTES.some(route => 
+        url.pathname === route || url.pathname.startsWith(`${route}/`)
+      );
+      
+      if (isSpaRoute) {
+        event.respondWith(
+          caches.match('/index.html')
+            .then(response => {
+              if (response) {
+                return response;
+              }
+              return fetch('/index.html');
+            })
+            .catch(() => {
+              return caches.match(OFFLINE_URL);
+            })
+        );
+        return;
+      }
     }
 
     // Check for module scripts
@@ -196,6 +316,43 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// Handle sync events for background data synchronization
+self.addEventListener('sync', (event) => {
+  console.log('Sync event received:', event.tag);
+  
+  if (!('workbox' in self)) {
+    console.log('Workbox not available for background sync');
+    return;
+  }
+  
+  if (event.tag === 'taskSync' && taskQueue) {
+    event.waitUntil(taskQueue.replayRequests().then(() => {
+      // Notify clients that sync is complete
+      notifyClientsOfSync('task');
+    }));
+  } else if (event.tag === 'routineSync' && routineQueue) {
+    event.waitUntil(routineQueue.replayRequests().then(() => {
+      notifyClientsOfSync('routine');
+    }));
+  } else if (event.tag === 'courseTeacherSync' && courseTeacherQueue) {
+    event.waitUntil(courseTeacherQueue.replayRequests().then(() => {
+      notifyClientsOfSync('courseTeacher');
+    }));
+  }
+});
+
+// Helper function to notify clients of sync completion
+function notifyClientsOfSync(category) {
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'BACKGROUND_SYNC_COMPLETED',
+        category: category
+      });
+    });
+  });
+}
+
 // Push notification handler
 self.addEventListener('push', (event) => {
   if (!event.data) return;
@@ -250,64 +407,64 @@ self.addEventListener('notificationclick', (event) => {
           if (windowClient.url === urlToOpen) {
             // Focus if already open
             windowClient.focus();
+            // Send message to client to handle the notification action
+            if (taskId) {
+              windowClient.postMessage({
+                type: 'NOTIFICATION_CLICK',
+                taskId: taskId,
+                notificationType: notificationType
+              });
+            }
             return true;
           }
           return false;
         });
 
-        // If no window/tab is already open, open one
+        // If no window with target URL, open a new one
         if (!hadWindowToFocus) {
-          clients.openWindow(urlToOpen).then((windowClient) => {
-            if (windowClient) {
-              windowClient.focus();
+          return clients.openWindow(urlToOpen).then((windowClient) => {
+            // Send message to newly opened client after a short delay
+            // to ensure the app has loaded
+            if (windowClient && taskId) {
+              setTimeout(() => {
+                windowClient.postMessage({
+                  type: 'NOTIFICATION_CLICK',
+                  taskId: taskId,
+                  notificationType: notificationType
+                });
+              }, 1000);
             }
-          });
-        }
-
-        // Broadcast message to all clients about the notification click
-        if (taskId && notificationType) {
-          windowClients.forEach((client) => {
-            client.postMessage({
-              type: 'NOTIFICATION_CLICKED',
-              payload: {
-                taskId,
-                notificationType
-              }
-            });
           });
         }
       })
   );
 });
 
-// Add global error handlers
-self.addEventListener('error', (event) => {
-  console.error('Service Worker error:', event.error);
-});
-
-self.addEventListener('unhandledrejection', (event) => {
-  console.error('Service Worker unhandled rejection:', event.reason);
-});
-
-// Add a safe cache helper function
+// Helper function to safely put items in cache
 async function safeCachePut(cacheName, request, response) {
   try {
+    // Clone the response to avoid consuming it
+    const responseToCache = response.clone();
+    
+    // Only cache valid responses
+    if (!responseToCache || responseToCache.status !== 200) {
+      return;
+    }
+    
     const cache = await caches.open(cacheName);
-    await cache.put(request, response);
-    return true;
+    await cache.put(request, responseToCache);
   } catch (error) {
-    console.error('Safe cache put error:', error, request.url);
-    return false;
+    console.error('Error caching response:', error);
   }
 }
 
-// Add a safe cache match function
+// Helper function to safely match items in cache
 async function safeCacheMatch(cacheName, request) {
   try {
     const cache = await caches.open(cacheName);
     return await cache.match(request);
   } catch (error) {
-    console.error('Safe cache match error:', error, request.url);
+    console.error('Error matching cache:', error);
     return null;
   }
 }

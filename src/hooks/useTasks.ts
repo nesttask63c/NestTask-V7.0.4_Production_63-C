@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase, testConnection } from '../lib/supabase';
 import { fetchTasks, createTask, updateTask, deleteTask } from '../services/task.service';
 import { useOfflineStatus } from './useOfflineStatus';
-import { saveToIndexedDB, getAllFromIndexedDB, getByIdFromIndexedDB, deleteFromIndexedDB, STORES } from '../utils/offlineStorage';
+import { saveToIndexedDB, getAllFromIndexedDB, getByIdFromIndexedDB, deleteFromIndexedDB, STORES, refreshUserCache } from '../utils/offlineStorage';
 import type { Task, NewTask } from '../types/task';
 
 // Extended Task type with userId for offline storage
@@ -128,7 +128,8 @@ export function useTasks(userId: string | undefined) {
       return;
     }
 
-    loadTasks();
+    // Always force refresh on initial load to ensure we have the latest data
+    loadTasks(true);
 
     // Set up real-time subscription for tasks updates when online
     if (!isOffline) {
@@ -144,8 +145,19 @@ export function useTasks(userId: string | undefined) {
         })
         .subscribe();
 
+      // Additional event listener for page visibility changes
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          // Force refresh when the page becomes visible again
+          loadTasks(true);
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
       return () => {
         supabase.removeChannel(subscription);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
   }, [userId, loadTasks, isOffline]);
@@ -405,6 +417,16 @@ export function useTasks(userId: string | undefined) {
     }
   };
 
+  // Function to refresh tasks with forced data reload
+  const refreshTasks = useCallback(async () => {
+    // Clear the cache timestamp to force a refresh
+    if (userId) {
+      // Use the new refreshUserCache function for more thorough cache clearing
+      await refreshUserCache(userId);
+    }
+    return loadTasks(true);
+  }, [userId, loadTasks]);
+
   return {
     tasks,
     loading,
@@ -412,7 +434,7 @@ export function useTasks(userId: string | undefined) {
     createTask: handleCreateTask,
     updateTask: handleUpdateTask,
     deleteTask: handleDeleteTask,
-    refreshTasks: () => loadTasks(true),
+    refreshTasks,
     syncOfflineChanges,
     isSyncing: syncInProgress,
     isOffline

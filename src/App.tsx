@@ -143,20 +143,30 @@ export default function App() {
   }, [tasks]);
 
   // Compute task stats - moved here from inside render to ensure consistent hook order
-  const taskStats = useMemo(() => ({
-    total: tasks.length,
-    inProgress: tasks.filter(t => t.status === 'in-progress').length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-    overdue: tasks.filter(t => isOverdue(t.dueDate) && t.status !== 'completed').length
-  }), [tasks]);
+  const taskStats = useMemo(() => {
+    // Make sure we have a valid tasks array before calculating
+    const validTasks = tasks && Array.isArray(tasks) ? tasks : [];
+    const totalTasks = validTasks.length;
+    
+    // Count all tasks regardless of status or category
+    return {
+      total: totalTasks,
+      inProgress: validTasks.filter(t => t.status === 'in-progress').length,
+      completed: validTasks.filter(t => t.status === 'completed').length,
+      overdue: validTasks.filter(t => isOverdue(t.dueDate) && t.status !== 'completed').length
+    };
+  }, [tasks]);
 
   // Compute category counts - moved here from inside render to ensure consistent hook order
   const categoryCounts = useMemo(() => {
-    return tasks.reduce((acc: Record<string, number>, task) => {
-      if (!acc[task.category]) {
-        acc[task.category] = 0;
+    const validTasks = tasks && Array.isArray(tasks) ? tasks : [];
+    
+    return validTasks.reduce((acc: Record<string, number>, task) => {
+      const category = task.category || 'others';
+      if (!acc[category]) {
+        acc[category] = 0;
       }
-      acc[task.category] = (acc[task.category] || 0) + 1;
+      acc[category] = (acc[category] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
   }, [tasks]);
@@ -210,7 +220,10 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         // Refresh data when page becomes visible after refresh
         if (user?.id) {
+          console.log('Page visible - forcing task refresh');
           refreshTasks();
+          // Force a re-render of taskStats when coming back to the page
+          setActivePage(prev => prev);
         }
       }
     };

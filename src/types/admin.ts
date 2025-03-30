@@ -1,1 +1,1 @@
-export type AdminTab = 'dashboard' | 'users' | 'tasks' | 'admin-tasks' | 'announcements' | 'courses' | 'study-materials' | 'routine' | 'teachers';
+export type AdminTab = 'dashboard' | 'users' | 'tasks' | 'announcements' | 'courses' | 'study-materials' | 'routine' | 'teachers';

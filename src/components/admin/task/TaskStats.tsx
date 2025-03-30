@@ -21,10 +21,20 @@ export function TaskStats({ tasks }: TaskStatsProps) {
   
   // Calculate statistics
   const statusStats = {
-    todo: tasks.filter(task => task.status === 'my-tasks').length,
-    inProgress: tasks.filter(task => task.status === 'in-progress').length,
+    todo: tasks.filter(task => task.status === 'my-tasks' && !isOverdue(task.dueDate)).length,
+    inProgress: tasks.filter(task => task.status === 'in-progress' && !isOverdue(task.dueDate)).length,
     completed: tasks.filter(task => task.status === 'completed').length,
+    overdue: tasks.filter(task => isOverdue(task.dueDate) && task.status !== 'completed').length
   };
+
+  // Helper function to check if a task is overdue
+  function isOverdue(dueDate: string): boolean {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const taskDate = new Date(dueDate);
+    taskDate.setHours(0, 0, 0, 0);
+    return taskDate < today;
+  }
 
   // Get unique categories and count tasks in each
   const categoryStats: Record<string, number> = {};
@@ -119,6 +129,7 @@ export function TaskStats({ tasks }: TaskStatsProps) {
       'todo': 'bg-blue-500',
       'inProgress': 'bg-yellow-500',
       'completed': 'bg-green-500',
+      'overdue': 'bg-red-500'
     };
     return colorMap[status] || 'bg-gray-500';
   };
@@ -281,6 +292,26 @@ export function TaskStats({ tasks }: TaskStatsProps) {
                             />
                           )}
                           
+                          {/* Overdue segment */}
+                          {statusStats.overdue > 0 && (
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="none"
+                              stroke="url(#status-redGradient)" // red gradient
+                              strokeWidth="15"
+                              strokeDasharray={`${statusStats.overdue / tasks.length * 238.8} 238.8`}
+                              strokeDashoffset={`${-1 * ((statusStats.todo + statusStats.inProgress) / tasks.length * 238.8)}`}
+                              transform="rotate(-90 50 50)"
+                              className="transition-all duration-700 ease-out"
+                              style={{ 
+                                strokeDasharray: animateChart ? `${statusStats.overdue / tasks.length * 238.8} 238.8` : '0 238.8',
+                                strokeDashoffset: animateChart ? `${-1 * ((statusStats.todo + statusStats.inProgress) / tasks.length * 238.8)}` : '0'
+                              }}
+                            />
+                          )}
+                          
                           {/* Completed segment */}
                           {statusStats.completed > 0 && (
                             <circle
@@ -291,12 +322,12 @@ export function TaskStats({ tasks }: TaskStatsProps) {
                               stroke="url(#status-greenGradient)" // green gradient
                               strokeWidth="15"
                               strokeDasharray={`${statusStats.completed / tasks.length * 238.8} 238.8`}
-                              strokeDashoffset={`${-1 * ((statusStats.todo + statusStats.inProgress) / tasks.length * 238.8)}`}
+                              strokeDashoffset={`${-1 * ((statusStats.todo + statusStats.inProgress + statusStats.overdue) / tasks.length * 238.8)}`}
                               transform="rotate(-90 50 50)"
                               className="transition-all duration-700 ease-out"
                               style={{ 
                                 strokeDasharray: animateChart ? `${statusStats.completed / tasks.length * 238.8} 238.8` : '0 238.8',
-                                strokeDashoffset: animateChart ? `${-1 * ((statusStats.todo + statusStats.inProgress) / tasks.length * 238.8)}` : '0'
+                                strokeDashoffset: animateChart ? `${-1 * ((statusStats.todo + statusStats.inProgress + statusStats.overdue) / tasks.length * 238.8)}` : '0'
                               }}
                             />
                           )}
@@ -317,6 +348,10 @@ export function TaskStats({ tasks }: TaskStatsProps) {
                           <stop offset="0%" stopColor="#10b981" />
                           <stop offset="100%" stopColor="#059669" />
                         </linearGradient>
+                        <linearGradient id="status-redGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#ef4444" />
+                          <stop offset="100%" stopColor="#dc2626" />
+                        </linearGradient>
                       </defs>
                     </svg>
                     
@@ -331,7 +366,7 @@ export function TaskStats({ tasks }: TaskStatsProps) {
                 </div>
 
                 {/* Status legend and details */}
-                <div className="grid grid-cols-3 gap-2 xs:gap-3 mt-2">
+                <div className="grid grid-cols-4 gap-2 xs:gap-3 mt-2">
                   <div className="flex flex-col items-center p-1.5 xs:p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                     <div className="bg-blue-500 w-2.5 h-2.5 xs:w-3 xs:h-3 rounded-full mb-0.5 xs:mb-1"></div>
                     <span className="text-[10px] xs:text-xs font-medium text-gray-700 dark:text-gray-300 text-center">To Do</span>
@@ -344,6 +379,13 @@ export function TaskStats({ tasks }: TaskStatsProps) {
                     <span className="text-[10px] xs:text-xs font-medium text-gray-700 dark:text-gray-300 text-center">In Progress</span>
                     <span className="text-xs xs:text-sm font-bold text-gray-800 dark:text-white">{statusStats.inProgress}</span>
                     <span className="text-[8px] xs:text-[10px] text-yellow-600 dark:text-yellow-400">{getPercentage(statusStats.inProgress)}%</span>
+                  </div>
+                  
+                  <div className="flex flex-col items-center p-1.5 xs:p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <div className="bg-red-500 w-2.5 h-2.5 xs:w-3 xs:h-3 rounded-full mb-0.5 xs:mb-1"></div>
+                    <span className="text-[10px] xs:text-xs font-medium text-gray-700 dark:text-gray-300 text-center">Due Tasks</span>
+                    <span className="text-xs xs:text-sm font-bold text-gray-800 dark:text-white">{statusStats.overdue}</span>
+                    <span className="text-[8px] xs:text-[10px] text-red-600 dark:text-red-400">{getPercentage(statusStats.overdue)}%</span>
                   </div>
                   
                   <div className="flex flex-col items-center p-1.5 xs:p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">

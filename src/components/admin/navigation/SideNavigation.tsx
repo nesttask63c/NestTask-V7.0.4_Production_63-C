@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Users, ListTodo, Settings, LogOut, Megaphone, Moon, Sun,
   Book, GraduationCap, FileText, CalendarDays, User, LayoutDashboard,
-  BarChart2, Bell, HelpCircle, Globe
+  BarChart2, Bell, HelpCircle, Globe, AlertCircle
 } from 'lucide-react';
 import { SideNavLink } from './SideNavLink';
 import { MobileMenuButton } from './MobileMenuButton';
@@ -36,7 +36,6 @@ export function SideNavigation({ activeTab, onTabChange, onLogout }: SideNavigat
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'users' as const, label: 'Users', icon: Users },
     { id: 'tasks' as const, label: 'Tasks', icon: ListTodo },
-    { id: 'admin-tasks' as const, label: 'Admin Tasks', icon: Settings },
     { id: 'announcements' as const, label: 'Announcements', icon: Megaphone },
     { id: 'teachers' as const, label: 'Teachers', icon: User },
     { id: 'courses' as const, label: 'Courses', icon: GraduationCap },
@@ -98,7 +97,7 @@ export function SideNavigation({ activeTab, onTabChange, onLogout }: SideNavigat
               <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Main</h2>
             </div>
             <nav className="space-y-1.5">
-              {navItems.slice(0, 4).map((item) => (
+              {navItems.slice(0, 5).map((item) => (
                 <SideNavLink
                   key={item.id}
                   icon={item.icon}
@@ -113,7 +112,7 @@ export function SideNavigation({ activeTab, onTabChange, onLogout }: SideNavigat
               <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Management</h2>
             </div>
             <nav className="space-y-1.5">
-              {navItems.slice(4).map((item) => (
+              {navItems.slice(5).map((item) => (
                 <SideNavLink
                   key={item.id}
                   icon={item.icon}

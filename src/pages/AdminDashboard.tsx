@@ -18,8 +18,10 @@ import { useRoutines } from '../hooks/useRoutines';
 import { useTeachers } from '../hooks/useTeachers';
 import { useUsers } from '../hooks/useUsers';
 import { showErrorToast } from '../utils/notifications';
+import { isOverdue } from '../utils/dateUtils';
 import type { User } from '../types/auth';
 import type { Task } from '../types/index';
+import type { NewTask } from '../types/task';
 import type { Teacher, NewTeacher } from '../types/teacher';
 import type { AdminTab } from '../types/admin';
 
@@ -27,7 +29,7 @@ interface AdminDashboardProps {
   users: User[];
   tasks: Task[];
   onLogout: () => void;
-  onCreateTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
+  onCreateTask: (task: NewTask) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
 }
@@ -82,6 +84,7 @@ export function AdminDashboard({
   
   const { deleteUser } = useUsers();
   const adminTasks = tasks.filter(task => task.isAdminTask);
+  const dueTasks = tasks.filter(task => isOverdue(task.dueDate) && task.status !== 'completed');
 
   const handleDeleteUser = async (userId: string) => {
     try {
@@ -130,6 +133,7 @@ export function AdminDashboard({
               {activeTab === 'users' && 'User Management'}
               {activeTab === 'tasks' && 'Task Management'}
               {activeTab === 'admin-tasks' && 'Admin Tasks'}
+              {activeTab === 'due-tasks' && 'Due Tasks'}
               {activeTab === 'announcements' && 'Announcements'}
               {activeTab === 'teachers' && 'Teacher Management'}
               {activeTab === 'courses' && 'Course Management'}
@@ -176,6 +180,34 @@ export function AdminDashboard({
                 onDeleteTask={onDeleteTask}
                 showDeleteButton={true}
               />
+            </div>
+          )}
+
+          {activeTab === 'due-tasks' && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-medium text-gray-900 dark:text-white">Due Tasks</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Tasks that are overdue and require attention
+                  </p>
+                </div>
+                <div className="px-3 py-1.5 bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300 rounded-lg text-sm font-medium">
+                  {dueTasks.length} {dueTasks.length === 1 ? 'task' : 'tasks'} overdue
+                </div>
+              </div>
+              
+              {dueTasks.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 dark:text-gray-400">No overdue tasks at the moment</p>
+                </div>
+              ) : (
+                <TaskList 
+                  tasks={dueTasks} 
+                  onDeleteTask={onDeleteTask}
+                  showDeleteButton={true}
+                />
+              )}
             </div>
           )}
 
