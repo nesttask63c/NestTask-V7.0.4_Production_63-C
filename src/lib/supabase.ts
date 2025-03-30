@@ -161,38 +161,49 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
       eventsPerSecond: 10
-    }
+    },
+    timeout: 30000 // 30 second timeout
   }
 });
 
-// Fetch with retry implementation using exponential backoff
-async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 300) {
+// Add custom retry logic for fetching
+const originalFetch = window.fetch;
+window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...options.headers,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+    // Apply custom logic only to Supabase requests
+    if (typeof input === 'string' && input.includes(supabaseUrl)) {
+      // Add timestamp to bypass cache for auth-related requests
+      const url = input.includes('auth') ? 
+        `${input}${input.includes('?') ? '&' : '?'}_t=${Date.now()}` : 
+        input;
+      
+      // Add no-cache headers
+      const updatedInit = {
+        ...init,
+        headers: {
+          ...init?.headers,
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache'
+        }
+      };
+      
+      try {
+        return await originalFetch(url, updatedInit);
+      } catch (error) {
+        console.error('Fetch error:', error);
+        // Try once more after a delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return await originalFetch(url, updatedInit);
       }
-    });
-    
-    // If response status indicates a server error, retry
-    if (response.status >= 500 && response.status < 600 && retries > 0) {
-      await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
     
-    return response;
+    // Pass through for all other requests
+    return originalFetch(input, init);
   } catch (error) {
-    // Only retry on network errors, not on client errors
-    if (retries > 0) {
-      await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 2);
-    }
-    throw error;
+    console.error('Global fetch error:', error);
+    return originalFetch(input, init);
   }
-}
+};
 
 // Function to test connection with debouncing and caching
 export async function testConnection() {
