@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useRoutines } from '../hooks/useRoutines';
 import { useCourses } from '../hooks/useCourses';
 import { useTeachers } from '../hooks/useTeachers';
@@ -24,12 +24,18 @@ import {
   WifiOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TeacherDetailsModal } from './TeacherDetailsModal';
 import type { Teacher } from '../types/teacher';
 import { getInitials } from '../utils/stringUtils';
+import React from 'react';
+
+// Lazy load TeacherDetailsModal to improve initial load time
+const TeacherDetailsModal = lazy(() => import('./TeacherDetailsModal').then(module => ({ default: module.TeacherDetailsModal })));
+
+// Create a memoized TeacherDetailsModal component to prevent unnecessary re-renders
+const MemoizedTeacherDetailsModal = React.memo(TeacherDetailsModal);
 
 export function RoutinePage() {
-  const { routines, loading, error } = useRoutines();
+  const { routines, loading, error, prefetchRoutineData } = useRoutines();
   const { courses } = useCourses();
   const { teachers } = useTeachers();
   const { user } = useAuth();
@@ -41,7 +47,12 @@ export function RoutinePage() {
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [selectedRoutineId, setSelectedRoutineId] = useState<string>('');
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = useMemo(() => user?.role === 'admin', [user]);
+
+  // Trigger prefetch when the component loads
+  useEffect(() => {
+    prefetchRoutineData();
+  }, [prefetchRoutineData]);
 
   const currentRoutine = useMemo(() => {
     if (selectedRoutineId) {
@@ -56,13 +67,13 @@ export function RoutinePage() {
     }
   }, [currentRoutine, selectedRoutineId]);
 
-  const handleRoutineChange = (routineId: string) => {
+  const handleRoutineChange = useCallback((routineId: string) => {
     if (routineId === 'create-new') {
       window.location.href = '/#admin?tab=routine';
     } else {
       setSelectedRoutineId(routineId);
     }
-  };
+  }, []);
 
   const weekDays = useMemo(() => {
     const start = startOfWeek(selectedDate, { weekStartsOn: 6 });
@@ -77,30 +88,28 @@ export function RoutinePage() {
     });
   }, [selectedDate]);
 
+  // Optimize slot enrichment process
   useEffect(() => {
     if (!currentRoutine?.slots) {
       setEnrichedSlots([]);
       return;
     }
 
-    console.log("Teachers available for RoutinePage:", teachers.length);
-    console.log("Courses available for RoutinePage:", courses.length);
+    // Create lookup maps for faster access
+    const courseMap = new Map();
+    const teacherMap = new Map();
+    
+    courses.forEach(course => courseMap.set(course.id, course));
+    teachers.forEach(teacher => teacherMap.set(teacher.id, teacher));
 
     const enriched = currentRoutine.slots.map(slot => {
-      // Find matching course by ID
-      const course = slot.courseId ? courses.find(c => c.id === slot.courseId) : undefined;
+      // Use map lookup instead of array.find (O(1) vs O(n))
+      const course = slot.courseId ? courseMap.get(slot.courseId) : undefined;
+      const teacher = slot.teacherId ? teacherMap.get(slot.teacherId) : undefined;
       
-      // Find matching teacher by ID
-      const teacher = slot.teacherId ? teachers.find(t => t.id === slot.teacherId) : undefined;
-      
-      // Prioritize using slot's own courseName/teacherName if available (for offline support)
-      // Fall back to course/teacher objects if available
       const courseName = slot.courseName || (course ? course.name : 'Unknown Course');
       const courseCode = course?.code || 'N/A';
       const teacherName = slot.teacherName || (teacher ? teacher.name : 'Unknown Teacher');
-      
-      console.log(`RoutinePage - Slot ${slot.id} - courseId: ${slot.courseId}, courseName: ${slot.courseName || courseName}`);
-      console.log(`RoutinePage - Slot ${slot.id} - teacherId: ${slot.teacherId}, teacherName: ${slot.teacherName || teacherName}`);
       
       return {
         ...slot,
@@ -118,16 +127,41 @@ export function RoutinePage() {
   const filteredSlots = useMemo(() => {
     return enrichedSlots.filter(slot => {
       const matchesSearch = searchTerm === '' || 
-        slot.course?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        slot.course?.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        slot.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        slot.courseCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         slot.roomNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        slot.teacher?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        slot.teacherName?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesDay = format(selectedDate, 'EEEE') === slot.dayOfWeek;
       
       return matchesSearch && matchesDay;
     });
   }, [enrichedSlots, searchTerm, selectedDate]);
+
+  // Create a memoized handler for day selection
+  const handleDaySelect = useCallback((day: Date) => {
+    setSelectedDate(day);
+  }, []);
+
+  // Create a memoized handler for teacher selection
+  const handleTeacherSelect = useCallback((teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+  }, []);
+
+  // Create a memoized handler for teacher modal close
+  const handleCloseTeacherModal = useCallback(() => {
+    setSelectedTeacher(null);
+  }, []);
+
+  // Create a memoized handler for mobile search toggle
+  const toggleMobileSearch = useCallback(() => {
+    setShowMobileSearch(prev => !prev);
+  }, []);
+
+  // Create a memoized handler for search term change
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
 
   if (loading) {
     return (
@@ -172,7 +206,7 @@ export function RoutinePage() {
             </div>
             
             <button 
-              onClick={() => setShowMobileSearch(!showMobileSearch)}
+              onClick={toggleMobileSearch}
               className="p-2 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
               aria-label={showMobileSearch ? "Hide search" : "Show search"}
             >
@@ -220,7 +254,7 @@ export function RoutinePage() {
                     type="text"
                     placeholder="Search courses, teachers, rooms..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchChange}
                     className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
                   />
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -270,7 +304,7 @@ export function RoutinePage() {
                 type="text"
                 placeholder="Search courses, teachers, rooms..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -309,17 +343,15 @@ export function RoutinePage() {
         </div>
 
         <div className="grid grid-cols-6 gap-1 sm:gap-2">
-          {weekDays.map((day) => (
-            <button
-              key={day.dayName}
-              onClick={() => setSelectedDate(day.date)}
-              className={`
-                flex flex-col items-center py-2 px-0.5 xs:py-2.5 xs:px-1 sm:p-3 md:p-4 rounded-xl transition-all duration-200 touch-manipulation focus:outline-none focus:ring-2 focus:ring-blue-500
-                ${day.isSelected
-                  ? 'bg-blue-600 text-white shadow-md scale-[1.02] focus:ring-blue-300'
-                  : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }
-              `}
+          {weekDays.map((day, i) => (
+            <div 
+              key={i}
+              className={`relative px-1 sm:px-2 py-1 text-center rounded-lg cursor-pointer ${
+                day.isSelected 
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'
+              }`}
+              onClick={() => handleDaySelect(day.date)}
             >
               <span className={`
                 text-[0.65rem] xs:text-xs sm:text-sm font-medium mb-0.5 sm:mb-1
@@ -339,7 +371,7 @@ export function RoutinePage() {
               `}>
                 {day.dayNum}
               </span>
-            </button>
+            </div>
           ))}
         </div>
       </div>
@@ -408,19 +440,13 @@ export function RoutinePage() {
                       <div className="flex justify-between items-center">
                         <span className="text-[11px] xs:text-xs sm:text-sm md:text-base lg:text-lg text-gray-500 dark:text-gray-400">Teacher</span>
                         <span className="text-[11px] xs:text-xs sm:text-sm md:text-base lg:text-lg font-medium">
-                          {slot.teacherId ? (
+                          {slot.teacher && (
                             <button
-                              onClick={() => {
-                                const fullTeacher = teachers.find(t => t.id === slot.teacherId);
-                                setSelectedTeacher(fullTeacher || null);
-                              }}
-                              className="text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 rounded-sm"
-                              title={slot.teacherName || 'Unknown Teacher'}
+                              onClick={() => handleTeacherSelect(slot.teacher)}
+                              className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center text-xs sm:text-sm"
                             >
                               {getInitials(slot.teacherName || 'Unknown')}
                             </button>
-                          ) : (
-                            'N/A'
                           )}
                         </span>
                       </div>
@@ -438,10 +464,14 @@ export function RoutinePage() {
       </div>
 
       {selectedTeacher && (
-        <TeacherDetailsModal
-          teacher={selectedTeacher}
-          onClose={() => setSelectedTeacher(null)}
-        />
+        <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm z-50">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+        </div>}>
+          <MemoizedTeacherDetailsModal
+            teacher={selectedTeacher}
+            onClose={handleCloseTeacherModal}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -3,10 +3,9 @@ import type { Routine, RoutineSlot } from '../types/routine';
 
 export async function fetchRoutines(): Promise<Routine[]> {
   try {
-    // Skip the attempt to fetch with course_name and teacher_name fields and go directly to the fallback approach
-    // since we know these columns don't exist based on the error
-    console.log('Using fallback approach for fetching routines');
+    console.log('Using optimized approach for fetching routines');
     
+    // Make a single query to fetch routines with slots and prefetch all related data
     const { data: routines, error: routinesError } = await supabase
       .from('routines')
       .select(`
@@ -27,21 +26,21 @@ export async function fetchRoutines(): Promise<Routine[]> {
 
     if (routinesError) throw routinesError;
 
-    // Fetch all courses and teachers to use for name lookups
-    const { data: allCourses } = await supabase.from('courses').select('id,name');
-    const { data: allTeachers } = await supabase.from('teachers').select('id,name');
+    // Fetch required data in parallel
+    const [coursesResponse, teachersResponse] = await Promise.all([
+      supabase.from('courses').select('id,name,code'),
+      supabase.from('teachers').select('id,name')
+    ]);
+    
+    const allCourses = coursesResponse.data || [];
+    const allTeachers = teachersResponse.data || [];
 
     // Create lookup maps for faster access
     const courseMap = new Map();
     const teacherMap = new Map();
     
-    if (allCourses) {
-      allCourses.forEach(course => courseMap.set(course.id, course.name));
-    }
-    
-    if (allTeachers) {
-      allTeachers.forEach(teacher => teacherMap.set(teacher.id, teacher.name));
-    }
+    allCourses.forEach(course => courseMap.set(course.id, { name: course.name, code: course.code }));
+    allTeachers.forEach(teacher => teacherMap.set(teacher.id, teacher.name));
 
     return routines.map(routine => ({
       id: routine.id,
@@ -51,21 +50,27 @@ export async function fetchRoutines(): Promise<Routine[]> {
       isActive: routine.is_active,
       createdAt: routine.created_at,
       createdBy: routine.created_by,
-      slots: routine.slots?.map(slot => ({
-        id: slot.id,
-        routineId: routine.id,
-        courseId: slot.course_id,
-        teacherId: slot.teacher_id,
-        // Look up names from our maps
-        courseName: (slot.course_id && courseMap.get(slot.course_id)) || '',
-        teacherName: (slot.teacher_id && teacherMap.get(slot.teacher_id)) || '',
-        dayOfWeek: slot.day_of_week,
-        startTime: slot.start_time,
-        endTime: slot.end_time,
-        roomNumber: slot.room_number,
-        section: slot.section,
-        createdAt: slot.created_at
-      }))
+      slots: routine.slots?.map((slot: any) => {
+        // Get course and teacher info from maps (constant time lookup)
+        const courseInfo = courseMap.get(slot.course_id) || {};
+        const teacherName = teacherMap.get(slot.teacher_id) || '';
+        
+        return {
+          id: slot.id,
+          routineId: routine.id,
+          courseId: slot.course_id,
+          teacherId: slot.teacher_id,
+          courseName: courseInfo.name || '',
+          courseCode: courseInfo.code || '',
+          teacherName: teacherName,
+          dayOfWeek: slot.day_of_week,
+          startTime: slot.start_time,
+          endTime: slot.end_time,
+          roomNumber: slot.room_number,
+          section: slot.section,
+          createdAt: slot.created_at
+        };
+      })
     }));
   } catch (error) {
     console.error('Error fetching routines:', error);

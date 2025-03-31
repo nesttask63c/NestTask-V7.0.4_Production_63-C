@@ -39,52 +39,41 @@ export function useRoutines() {
         console.log('Offline mode: Loading routines from IndexedDB');
         const offlineRoutines = await getAllFromIndexedDB(STORES.ROUTINES);
         
-        // Also load courses and teachers from IndexedDB for offline support
-        const offlineCourses = await getAllFromIndexedDB(STORES.COURSES);
-        const offlineTeachers = await getAllFromIndexedDB(STORES.TEACHERS);
-        
-        console.log('Offline data loaded:', {
-          routines: offlineRoutines?.length || 0,
-          courses: offlineCourses?.length || 0,
-          teachers: offlineTeachers?.length || 0
-        });
-        
         if (offlineRoutines && offlineRoutines.length > 0) {
-          // Make sure slots have courseName and teacherName properties for offline use
-          const routinesWithNames = offlineRoutines.map(routine => {
-            if (!routine.slots) return routine;
-            
-            return {
-              ...routine,
-              slots: routine.slots.map((slot: RoutineSlot) => {
-                // Find teacher and course by ID
-                const course = slot.courseId ? offlineCourses?.find(c => c.id === slot.courseId) : undefined;
-                const teacher = slot.teacherId ? offlineTeachers?.find(t => t.id === slot.teacherId) : undefined;
-                
-                // Make sure we have courseName and teacherName
-                return {
-                  ...slot,
-                  courseName: slot.courseName || (course ? course.name : ''),
-                  teacherName: slot.teacherName || (teacher ? teacher.name : '')
-                };
-              })
-            };
-          });
-          
-          console.log('Found offline routines with names populated:', routinesWithNames.length);
-          setRoutines(routinesWithNames);
+          console.log('Found offline routines:', offlineRoutines.length);
+          setRoutines(offlineRoutines);
         } else {
           console.log('No offline routines found');
           setRoutines([]);
         }
       } else {
-        // Always fetch fresh data online
-        console.log('Online mode: Fetching fresh routine data');
+        // Check cache validity and only fetch if necessary
+        const lastFetchedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        const currentTime = Date.now();
+        const cacheDurationMs = 5 * 60 * 1000; // 5 minutes cache duration
+        const isCacheValid = lastFetchedTimestamp && 
+                            (currentTime - parseInt(lastFetchedTimestamp)) < cacheDurationMs;
+        
+        // Skip fetch if cache is valid and not forcing refresh
+        if (isCacheValid && !forceRefresh) {
+          console.log('Using cached routines data (valid for 5 minutes)');
+          const cachedRoutines = await getAllFromIndexedDB(STORES.ROUTINES);
+          if (cachedRoutines && cachedRoutines.length > 0) {
+            setRoutines(cachedRoutines);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Fetch fresh data if cache is invalid or forced refresh
+        console.log('Fetching fresh routine data from server');
         const data = await fetchRoutines();
+        
+        // Update local state
         setRoutines(data);
         
-        // Save routines to IndexedDB for offline use
-        console.log('Saving routines to IndexedDB for offline access');
+        // Update cache timestamp and save to IndexedDB
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, currentTime.toString());
         await saveToIndexedDB(STORES.ROUTINES, data);
       }
     } catch (err: any) {
@@ -108,8 +97,30 @@ export function useRoutines() {
     }
   }, [isOffline]);
 
+  // New function to prefetch related data for faster loading
+  const prefetchRoutineData = useCallback(async () => {
+    if (isOffline) return; // Don't prefetch when offline
+    
+    try {
+      console.log('Prefetching routine-related data for faster access');
+      
+      // Prefetch courses and teachers in parallel
+      await Promise.all([
+        supabase.from('courses').select('id,name,code'),
+        supabase.from('teachers').select('id,name')
+      ]);
+      
+      console.log('Prefetch completed successfully');
+    } catch (err) {
+      console.error('Error prefetching routine data:', err);
+      // Silent failure - this is just an optimization
+    }
+  }, [isOffline]);
+
+  // Add prefetch call to the main effect
   useEffect(() => {
     loadRoutines();
+    prefetchRoutineData(); // Prefetch related data while loading routines
 
     // Only subscribe to changes when online
     if (!isOffline) {
@@ -132,7 +143,7 @@ export function useRoutines() {
         subscription.unsubscribe();
       };
     }
-  }, [isOffline, loadRoutines]);
+  }, [isOffline, loadRoutines, prefetchRoutineData]);
 
   // Enhanced offline sync with improved progress tracking and error handling
   const syncOfflineChanges = async () => {
@@ -931,6 +942,7 @@ export function useRoutines() {
     exportRoutine,
     getSemesters,
     getRoutinesBySemester,
-    refreshRoutines
+    refreshRoutines,
+    prefetchRoutineData
   };
 }

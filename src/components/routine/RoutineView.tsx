@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useCourses } from '../../hooks/useCourses';
 import { useTeachers } from '../../hooks/useTeachers';
@@ -18,9 +18,14 @@ import {
   Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TeacherDetailsModal } from './TeacherDetailsModal';
 import type { Teacher } from '../../types/teacher';
 import { getInitials } from '../../utils/stringUtils';
+
+// Create a fixed temporary modal component that properly handles the types
+const RoutineTeacherDetailsModal = lazy(() => import('./TeacherDetailsModal').then(module => ({
+  default: ({ teacher, onClose }: { teacher: Teacher, onClose: () => void }) => 
+    <module.TeacherDetailsModal teacher={teacher} onClose={onClose} />
+})));
 
 export function RoutineView() {
   const { routines, loading } = useRoutines();
@@ -33,7 +38,9 @@ export function RoutineView() {
   const [enrichedSlots, setEnrichedSlots] = useState<any[]>([]);
   const [isMobileSearchVisible, setIsMobileSearchVisible] = useState(false);
 
-  const currentRoutine = routines.find(r => r.isActive) || routines[0];
+  const currentRoutine = useMemo(() => {
+    return routines.find(r => r.isActive) || routines[0];
+  }, [routines]);
 
   const weekDays = useMemo(() => {
     const start = startOfWeek(selectedDate, { weekStartsOn: 6 });
@@ -48,21 +55,24 @@ export function RoutineView() {
     });
   }, [selectedDate]);
 
-  // Enrich slots with course and teacher data
+  // Optimize slot enrichment with maps for faster lookups
   useEffect(() => {
     if (!currentRoutine?.slots) {
       setEnrichedSlots([]);
       return;
     }
 
-    console.log("Teachers available for RoutineView:", teachers.length);
+    // Create lookup maps for courses and teachers (O(1) access)
+    const courseMap = new Map();
+    const teacherMap = new Map();
+    
+    courses.forEach(course => courseMap.set(course.id, course));
+    teachers.forEach(teacher => teacherMap.set(teacher.id, teacher));
 
     const enriched = currentRoutine.slots.map(slot => {
-      const course = slot.courseId ? courses.find(c => c.id === slot.courseId) : undefined;
-      const teacher = slot.teacherId ? teachers.find(t => t.id === slot.teacherId) : undefined;
-      
-      // Log teacher details for debugging
-      console.log(`RoutineView - Slot ${slot.id} - teacherId: ${slot.teacherId}, teacherName: ${slot.teacherName}, Found teacher:`, teacher?.name || "null");
+      // Use map lookup instead of array.find (O(1) vs O(n))
+      const course = slot.courseId ? courseMap.get(slot.courseId) : undefined;
+      const teacher = slot.teacherId ? teacherMap.get(slot.teacherId) : undefined;
       
       // If courseName isn't set but we have a course, populate it
       const courseName = slot.courseName || (course ? course.name : undefined);
@@ -84,10 +94,10 @@ export function RoutineView() {
   const filteredSlots = useMemo(() => {
     return enrichedSlots.filter(slot => {
       const matchesSearch = searchTerm === '' || 
-        slot.course?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        slot.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         slot.course?.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         slot.roomNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        slot.teacher?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        slot.teacherName?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesSection = !selectedSection || slot.section === selectedSection;
       const matchesDay = format(selectedDate, 'EEEE') === slot.dayOfWeek;
@@ -105,6 +115,31 @@ export function RoutineView() {
     });
     return Array.from(uniqueSections).sort();
   }, [enrichedSlots]);
+
+  // Memoize handlers to prevent recreating functions on each render
+  const toggleMobileSearch = useCallback(() => {
+    setIsMobileSearchVisible(prev => !prev);
+  }, []);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleSectionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSection(e.target.value);
+  }, []);
+
+  const handleTeacherSelect = useCallback((teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+  }, []);
+
+  const handleCloseTeacherModal = useCallback(() => {
+    setSelectedTeacher(null);
+  }, []);
+
+  const handleDaySelect = useCallback((day: Date) => {
+    setSelectedDate(day);
+  }, []);
 
   if (loading) {
     return (
@@ -138,7 +173,7 @@ export function RoutineView() {
               <h1 className="text-base font-bold text-gray-900 dark:text-white">Class Routine</h1>
             </div>
             <button 
-              onClick={() => setIsMobileSearchVisible(!isMobileSearchVisible)}
+              onClick={toggleMobileSearch}
               className="p-1.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
               aria-label="Search"
             >
@@ -164,7 +199,7 @@ export function RoutineView() {
                     type="text"
                     placeholder="Search..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchChange}
                     className="w-full pl-8 pr-2 py-1.5 text-xs border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                   />
                   <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
@@ -176,7 +211,7 @@ export function RoutineView() {
           <div className="relative w-full">
             <select
               value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
+              onChange={handleSectionChange}
               className="w-full pl-3 pr-8 py-1.5 text-xs border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
             >
               <option value="">All Sections</option>
@@ -205,7 +240,7 @@ export function RoutineView() {
               <div className="relative w-full sm:w-auto">
                 <select
                   value={selectedSection}
-                  onChange={(e) => setSelectedSection(e.target.value)}
+                  onChange={handleSectionChange}
                   className="w-full pl-8 pr-3 py-1.5 text-sm border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
                 >
                   <option value="">All Sections</option>
@@ -223,7 +258,7 @@ export function RoutineView() {
                 type="text"
                 placeholder="Search courses, teachers, rooms..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 className="w-full pl-8 pr-3 py-1.5 text-sm border dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -238,7 +273,7 @@ export function RoutineView() {
           <button
             onClick={() => {
               const prevDay = addDays(selectedDate, -1);
-              setSelectedDate(prevDay);
+              handleDaySelect(prevDay);
             }}
             className="p-1 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
             aria-label="Previous day"
@@ -253,7 +288,7 @@ export function RoutineView() {
           <button
             onClick={() => {
               const nextDay = addDays(selectedDate, 1);
-              setSelectedDate(nextDay);
+              handleDaySelect(nextDay);
             }}
             className="p-1 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
             aria-label="Next day"
@@ -266,7 +301,7 @@ export function RoutineView() {
           {weekDays.map((day) => (
             <button
               key={day.dayName}
-              onClick={() => setSelectedDate(day.date)}
+              onClick={() => handleDaySelect(day.date)}
               className={`
                 flex flex-col items-center py-1 sm:py-1.5 px-0.5 sm:px-1 md:p-2 lg:p-3 rounded-md sm:rounded-lg transition-all duration-200 touch-manipulation
                 ${day.isSelected
@@ -364,9 +399,10 @@ export function RoutineView() {
                         {slot.teacherId ? (
                           <button 
                             onClick={() => {
-                              // Find the full teacher object for modal display
-                              const fullTeacher = teachers.find(t => t.id === slot.teacherId);
-                              setSelectedTeacher(fullTeacher || null);
+                              const teacherData = teachers.find(t => t.id === slot.teacherId);
+                              if (teacherData) {
+                                handleTeacherSelect(teacherData);
+                              }
                             }} 
                             className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium"
                             title={slot.teacherName || (slot.teacher ? slot.teacher.name : 'N/A')}
@@ -390,10 +426,14 @@ export function RoutineView() {
 
       {/* Teacher Details Modal */}
       {selectedTeacher && (
-        <TeacherDetailsModal
-          teacher={selectedTeacher}
-          onClose={() => setSelectedTeacher(null)}
-        />
+        <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm z-50">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+        </div>}>
+          <RoutineTeacherDetailsModal
+            teacher={selectedTeacher}
+            onClose={handleCloseTeacherModal}
+          />
+        </Suspense>
       )}
     </div>
   );
