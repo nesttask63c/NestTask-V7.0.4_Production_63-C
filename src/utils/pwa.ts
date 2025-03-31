@@ -80,35 +80,12 @@ export async function registerServiceWorker() {
     }
     
     // Register new service worker with controlled timing
-    const swRegisterPromise = navigator.serviceWorker.register('/service-worker.js', {
+    console.log('Registering new service worker...');
+    const registration = await navigator.serviceWorker.register('/service-worker.js', {
       scope: '/',
       // Update only when user is idle to minimize disruption
       updateViaCache: 'none',
     });
-    
-    // Apply timeout to service worker registration
-    const registration = await Promise.race([
-      swRegisterPromise,
-      new Promise<null>((resolve) => {
-        // If registration takes more than 10 seconds, proceed without waiting
-        setTimeout(() => resolve(null), 10000);
-      })
-    ]) as ServiceWorkerRegistration | null;
-    
-    if (!registration) {
-      console.warn('Service Worker registration timed out, app will continue without it');
-      // Try again in the background without blocking the app
-      setTimeout(() => {
-        navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-          .then(delayedReg => {
-            serviceWorkerRegistration = delayedReg;
-            setupUpdateHandler(delayedReg);
-            console.log('Service Worker registered in background');
-          })
-          .catch(err => console.error('Background service worker registration failed:', err));
-      }, 5000);
-      return null;
-    }
     
     serviceWorkerRegistration = registration;
     console.log('Service Worker registered with scope:', registration.scope);
@@ -325,9 +302,8 @@ export function setupOfflineDetection() {
         detail: { offlineDuration }
       }));
       
-      // If we were offline for more than 30 minutes, reload the page
-      // This helps recover from stale service worker or cache issues
-      if (offlineDuration > 30 * 60 * 1000) {
+      // Only reload for very long offline periods (2+ hours)
+      if (offlineDuration > 2 * 60 * 60 * 1000) {
         console.log('Long offline period detected, refreshing app');
         setTimeout(() => window.location.reload(), 1000);
         return;

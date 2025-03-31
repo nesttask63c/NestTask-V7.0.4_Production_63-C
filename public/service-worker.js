@@ -59,9 +59,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('Caching app shell and static assets');
-      return cache.addAll(STATIC_ASSETS.map(url => {
-        return new Request(url, { cache: 'reload' });
-      }));
+      return cache.addAll(STATIC_ASSETS);
     })
   );
   self.skipWaiting();
@@ -201,28 +199,13 @@ self.addEventListener('fetch', (event) => {
     if (event.request.mode === 'navigate') {
       event.respondWith(
         (async () => {
-          try {
-            // Try network first for fresh content
-            const networkResponse = await fetch(event.request);
-            
-            // If online, update the cache with the fresh content
-            if (networkResponse.ok) {
-              const cache = await caches.open(CACHE_NAME);
-              cache.put(event.request, networkResponse.clone());
-              return networkResponse;
-            }
-          } catch (error) {
-            console.log('Fetch failed, falling back to cache', error);
-            // Network failed, try cache
-          }
-          
-          // Look for a cached response
+          // Try cache first for faster navigation
           const cachedResponse = await caches.match(event.request);
           if (cachedResponse) {
             return cachedResponse;
           }
           
-          // Check for cached index.html for SPA routes
+          // If not in cache, try cached index.html for SPA routes
           const isSpaRoute = SPA_ROUTES.some(route => 
             url.pathname === route || url.pathname.startsWith(`${route}/`)
           );
@@ -234,6 +217,20 @@ self.addEventListener('fetch', (event) => {
             }
           }
           
+          // Try network as fallback
+          try {
+            const networkResponse = await fetch(event.request);
+            
+            // If online, update the cache with the fresh content
+            if (networkResponse.ok) {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(event.request, networkResponse.clone());
+              return networkResponse;
+            }
+          } catch (error) {
+            console.log('Fetch failed, already checked cache');
+          }
+          
           // If all else fails, show the offline page
           return caches.match(OFFLINE_URL);
         })()
@@ -241,53 +238,50 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
-    // Check for module scripts
-    const isModuleScript = event.request.destination === 'script' && 
-                           (url.pathname.endsWith('.mjs') || url.pathname.includes('assets/'));
-    
-    // For module scripts, ensure proper handling
-    if (isModuleScript) {
+    // For other assets (JS, CSS, images, etc.) - check cache first
+    if (shouldCacheAtRuntime(event.request.url) || 
+        event.request.destination === 'script' || 
+        event.request.destination === 'style' || 
+        event.request.destination === 'image') {
+      
       event.respondWith(
-        fetch(event.request)
-          .then(response => {
-            if (response.ok) {
-              // Only cache if response is valid
-              const responseClone = response.clone();
-              safeCachePut(CACHE_NAME, event.request, responseClone);
+        caches.match(event.request)
+          .then(cachedResponse => {
+            if (cachedResponse) {
+              // Return cached version and update cache in background
+              const fetchPromise = fetch(event.request)
+                .then(networkResponse => {
+                  if (networkResponse.ok) {
+                    const cache = caches.open(CACHE_NAME)
+                      .then(cache => cache.put(event.request, networkResponse.clone()));
+                  }
+                  return networkResponse;
+                })
+                .catch(() => { /* Ignore fetch errors when we have cached version */ });
+              
+              // Return cached response immediately
+              return cachedResponse;
             }
-            return response;
-          })
-          .catch(async () => {
-            // Fallback to cache
-            const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-            return cachedResponse || new Response('Module not available', { status: 404 });
-          })
-      );
-      return;
-    }
-
-    // For runtime-cacheable assets (JS, CSS, images) - stale-while-revalidate
-    if (shouldCacheAtRuntime(event.request.url)) {
-      event.respondWith(
-        (async () => {
-          // Try to get from cache first
-          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-          
-          // Fetch from network in background
-          const fetchPromise = fetch(event.request)
-            .then(networkResponse => {
-              // Cache the new version
-              safeCachePut(CACHE_NAME, event.request, networkResponse.clone());
-              return networkResponse;
-            })
-            .catch(() => {
-              // If fetch fails, return cached or null
-              return cachedResponse || null;
-            });
             
-          // Return cached response immediately, or wait for network
-          return cachedResponse || fetchPromise;
-        })()
+            // If no cached version, try network
+            return fetch(event.request)
+              .then(networkResponse => {
+                if (networkResponse.ok) {
+                  // Cache for next time
+                  const responseToCache = networkResponse.clone();
+                  caches.open(CACHE_NAME)
+                    .then(cache => cache.put(event.request, responseToCache));
+                }
+                return networkResponse;
+              })
+              .catch(() => {
+                // If fetch fails and it's an image, return fallback image
+                if (event.request.destination === 'image') {
+                  return new Response('', { status: 404 });
+                }
+                return new Response('Network error', { status: 408 });
+              });
+          })
       );
       return;
     }
@@ -299,13 +293,14 @@ self.addEventListener('fetch', (event) => {
           // Cache successful responses that match patterns
           if (response.ok && shouldCacheAtRuntime(event.request.url)) {
             const responseClone = response.clone();
-            safeCachePut(CACHE_NAME, event.request, responseClone);
+            caches.open(CACHE_NAME)
+              .then(cache => cache.put(event.request, responseClone));
           }
           return response;
         })
         .catch(async () => {
           // Try to get from cache
-          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
+          const cachedResponse = await caches.match(event.request);
           if (cachedResponse) return cachedResponse;
 
           // Return error response

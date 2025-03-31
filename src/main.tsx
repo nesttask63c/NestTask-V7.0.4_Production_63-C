@@ -24,9 +24,8 @@ const App = lazy(() => import('./App').then(module => {
 
 // Initialize PWA functionality in parallel but don't block initial render
 const pwaPromise = Promise.resolve().then(() => {
-  setTimeout(() => {
-    initPWA().catch(err => console.error('PWA initialization error:', err));
-  }, 1000);
+  // Register service worker immediately instead of delaying
+  initPWA().catch(err => console.error('PWA initialization error:', err));
 });
 
 // Enhanced prefetch for resources with priority marking
@@ -213,14 +212,16 @@ if (isRecoveryAttempt) {
   // Force a clean reload if necessary
   if (url.searchParams.has('fresh')) {
     console.log('Performing clean app reload');
-    // Don't add this logic to the render path, add it as a side effect
-    setTimeout(() => {
-      // Clear the recovery params and reload once more for a clean state
-      url.searchParams.delete('fresh');
-      url.searchParams.delete('reload');
-      url.searchParams.delete('online');
-      window.history.replaceState({}, '', url.toString());
-    }, 1000);
+    // Immediately clear the URL params to prevent refresh loops
+    url.searchParams.delete('fresh');
+    url.searchParams.delete('reload');
+    url.searchParams.delete('online');
+    window.history.replaceState({}, '', url.toString());
+  } else {
+    // For regular recovery attempts, just clear the params
+    url.searchParams.delete('reload');
+    url.searchParams.delete('online');
+    window.history.replaceState({}, '', url.toString());
   }
 }
 
