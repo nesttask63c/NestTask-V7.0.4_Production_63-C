@@ -305,7 +305,7 @@ export function RoutineView() {
               className={`
                 flex flex-col items-center py-1 sm:py-1.5 px-0.5 sm:px-1 md:p-2 lg:p-3 rounded-md sm:rounded-lg transition-all duration-200 touch-manipulation
                 ${day.isSelected
-                  ? 'bg-blue-600 text-white shadow-md scale-[1.02]'
+                  ? 'bg-blue-500 text-white shadow-md'
                   : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }
               `}

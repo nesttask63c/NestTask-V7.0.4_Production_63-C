@@ -342,36 +342,28 @@ export function RoutinePage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-6 gap-1 sm:gap-2">
+        <div className="grid grid-cols-6 gap-1.5 sm:gap-2 mb-4">
           {weekDays.map((day, i) => (
-            <div 
+            <button 
               key={i}
-              className={`relative px-1 sm:px-2 py-1 text-center rounded-lg cursor-pointer ${
+              className={`flex flex-col items-center justify-center h-14 sm:h-16 py-1 px-1 rounded-lg focus:outline-none ${
                 day.isSelected 
-                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                  ? 'bg-blue-500 text-white shadow-sm' 
+                  : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
               onClick={() => handleDaySelect(day.date)}
             >
-              <span className={`
-                text-[0.65rem] xs:text-xs sm:text-sm font-medium mb-0.5 sm:mb-1
-                ${day.isSelected
-                  ? 'text-blue-100'
-                  : 'text-gray-500 dark:text-gray-400'
-                }
-              `}>
+              <span className={`text-xs mb-0.5 ${
+                day.isSelected ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+              }`}>
                 {day.dayName}
               </span>
-              <span className={`
-                text-base xs:text-lg sm:text-xl md:text-2xl font-bold
-                ${day.isSelected
-                  ? 'text-white'
-                  : 'text-gray-900 dark:text-white'
-                }
-              `}>
+              <span className={`text-base sm:text-lg font-bold ${
+                day.isSelected ? 'text-white' : 'text-gray-900 dark:text-white'
+              }`}>
                 {day.dayNum}
               </span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
