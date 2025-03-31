@@ -3,7 +3,6 @@ import { SearchBar } from '../components/search/SearchBar';
 import { TaskList } from '../components/TaskList';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import type { Task } from '../types';
-import { WifiOff } from 'lucide-react';
 
 interface SearchPageProps {
   tasks: Task[];
@@ -100,13 +99,6 @@ export function SearchPage({ tasks }: SearchPageProps) {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Search Tasks</h1>
       
       <SearchBar onSearch={handleSearch} initialQuery={searchQuery} />
-      
-      {isOffline && (
-        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 text-amber-800 dark:text-amber-300">
-          <WifiOff className="w-4 h-4" />
-          <p className="text-sm">You're offline. Searching in locally stored tasks.</p>
-        </div>
-      )}
       
       {hasSearched ? (
         searchResults.length > 0 ? (
