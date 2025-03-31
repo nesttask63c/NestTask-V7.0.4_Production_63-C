@@ -8,6 +8,12 @@ export function OfflineIndicator() {
   useEffect(() => {
     // Set initial state
     setIsOffline(!navigator.onLine);
+    
+    if (!navigator.onLine) {
+      setShowIndicator(true);
+      // Hide offline indicator after 5 seconds
+      setTimeout(() => setShowIndicator(false), 5000);
+    }
 
     // Handle online/offline events
     const handleOnline = () => {
@@ -21,6 +27,8 @@ export function OfflineIndicator() {
     const handleOffline = () => {
       setIsOffline(true);
       setShowIndicator(true);
+      // Hide the offline indicator after 5 seconds
+      setTimeout(() => setShowIndicator(false), 5000);
     };
 
     window.addEventListener('online', handleOnline);

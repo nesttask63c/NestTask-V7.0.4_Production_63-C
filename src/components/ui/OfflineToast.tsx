@@ -13,6 +13,13 @@ export function OfflineToast() {
       setMessage('Network connection unavailable. Some features may be limited.');
       setIsOnlineTransition(false);
       setShow(true);
+      
+      // Hide the toast after 5 seconds even when offline
+      const timer = setTimeout(() => {
+        setShow(false);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
     } else {
       // Only show online message if we were previously offline
       if (show) {
@@ -28,7 +35,7 @@ export function OfflineToast() {
         return () => clearTimeout(timer);
       }
     }
-  }, [isOffline]);
+  }, [isOffline, show]);
 
   if (!show) return null;
 

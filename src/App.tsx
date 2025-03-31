@@ -14,7 +14,7 @@ import { InstallPWA } from './components/InstallPWA';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 import { OfflineToast } from './components/ui/OfflineToast';
 import { OfflineSyncManager } from './components/ui/OfflineSyncManager';
-import { ListTodo, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { ListTodo, CheckCircle2, Clock, AlertCircle, X } from 'lucide-react';
 import { TaskCategories } from './components/task/TaskCategories';
 import { isOverdue, isSameDay } from './utils/dateUtils';
 import { useOfflineStatus } from './hooks/useOfflineStatus';
@@ -76,6 +76,7 @@ export default function App() {
     clearNotification 
   } = useNotifications(user?.id);
   const isOffline = useOfflineStatus();
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
   
   const [activePage, setActivePage] = useState<NavPage>('home');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -472,6 +473,22 @@ export default function App() {
     }
   };
 
+  // Handle showing/hiding offline banner
+  useEffect(() => {
+    if (isOffline) {
+      setShowOfflineBanner(true);
+      
+      // Hide the banner after 5 seconds
+      const timer = setTimeout(() => {
+        setShowOfflineBanner(false);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+    // No need to return anything if isOffline is false
+    return undefined;
+  }, [isOffline]);
+
   // Early returns based on loading state and authentication
   if (isLoading || authLoading || (user?.role === 'admin' && usersLoading)) {
     return <LoadingScreen minimumLoadTime={1000} showProgress={true} />;
@@ -537,8 +554,8 @@ export default function App() {
       )}
       
       <main className="max-w-7xl mx-auto px-4 py-20 pb-24">
-        {isOffline && (
-          <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
+        {isOffline && showOfflineBanner && (
+          <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md animate-fade-in">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <AlertCircle className="h-5 w-5 text-yellow-400" />
@@ -548,6 +565,12 @@ export default function App() {
                   Network connection unavailable. Some features may be limited.
                 </p>
               </div>
+              <button 
+                onClick={() => setShowOfflineBanner(false)}
+                className="ml-auto text-yellow-400 hover:text-yellow-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}

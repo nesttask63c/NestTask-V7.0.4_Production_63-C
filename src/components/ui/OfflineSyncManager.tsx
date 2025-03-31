@@ -30,12 +30,30 @@ export function OfflineSyncManager({ onSync }: OfflineSyncManagerProps) {
     if (isOffline) {
       setWasOffline(true);
       setSyncMessage('Network connection unavailable. Your changes will be synchronized automatically once the connection is restored.');
+      
+      // Hide the offline message after 5 seconds to be less intrusive
+      // but keep tracking offline state in the background
+      const timer = setTimeout(() => {
+        setShowSyncPrompt(false);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
     } else if (wasOffline) {
       // We were offline but now we're online
       setShowSyncPrompt(true);
       setSyncMessage('Connection restored. Would you like to synchronize your changes now?');
+      
+      // If user doesn't interact, hide the prompt after 10 seconds
+      const timer = setTimeout(() => {
+        // Only hide if sync hasn't started yet
+        if (!isSyncing && syncSuccess === null) {
+          setShowSyncPrompt(false);
+        }
+      }, 10000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [isOffline, wasOffline]);
+  }, [isOffline, wasOffline, isSyncing, syncSuccess]);
 
   // Listen for background sync completion messages from service worker
   useEffect(() => {
