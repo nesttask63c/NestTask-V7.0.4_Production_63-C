@@ -268,20 +268,7 @@ export function setupOfflineDetection() {
       console.log('App is back online');
       document.body.classList.remove('offline-mode');
       
-      // Create and show notification
-      if ('Notification' in window) {
-        // Request notification permission if needed
-        if (Notification.permission === 'granted') {
-          new Notification('NestTask is Online', {
-            body: 'Your connection has been restored. All your changes will now be synchronized.',
-            icon: '/icons/icon-192x192.png'
-          });
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission();
-        }
-      }
-      
-      // Also dispatch an event for the app to handle
+      // Dispatch an event for the app to handle
       window.dispatchEvent(new CustomEvent('app-online'));
       
       // Attempt to sync any pending changes
@@ -299,23 +286,6 @@ export function setupOfflineDetection() {
     console.log('App is now offline');
     document.body.classList.add('offline-mode');
     wasOffline = true;
-    
-    // Create and show notification
-    if ('Notification' in window) {
-      // Request notification permission if needed
-      if (Notification.permission === 'granted') {
-        const offlineNotification = new Notification('NestTask is Offline', {
-          body: 'You are now working offline. Your changes will be synchronized when you reconnect.',
-          icon: '/icons/icon-192x192.png',
-          tag: 'offline-alert'
-        });
-        
-        // Auto-close notification after 5 seconds
-        setTimeout(() => offlineNotification.close(), 5000);
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission();
-      }
-    }
     
     // Dispatch offline event for app to handle
     window.dispatchEvent(new CustomEvent('app-offline'));
