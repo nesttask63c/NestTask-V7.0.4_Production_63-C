@@ -49,12 +49,12 @@ export function OfflineIndicator() {
       {isOffline ? (
         <>
           <WifiOff className="w-4 h-4" />
-          <span className="text-sm font-medium">You are offline</span>
+          <span className="text-sm font-medium">Network Unavailable</span>
         </>
       ) : (
         <>
           <Wifi className="w-4 h-4" />
-          <span className="text-sm font-medium">You are back online</span>
+          <span className="text-sm font-medium">Connection Restored</span>
         </>
       )}
     </div>

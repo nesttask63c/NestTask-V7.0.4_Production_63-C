@@ -10,13 +10,13 @@ export function OfflineToast() {
 
   useEffect(() => {
     if (isOffline) {
-      setMessage('You are now offline. Some features may be limited.');
+      setMessage('Network connection unavailable. Some features may be limited.');
       setIsOnlineTransition(false);
       setShow(true);
     } else {
       // Only show online message if we were previously offline
       if (show) {
-        setMessage('You are back online!');
+        setMessage('Connection restored.');
         setIsOnlineTransition(true);
         setShow(true);
         

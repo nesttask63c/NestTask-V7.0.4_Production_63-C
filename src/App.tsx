@@ -545,7 +545,7 @@ export default function App() {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-yellow-700">
-                  You are currently offline. Some features may be limited.
+                  Network connection unavailable. Some features may be limited.
                 </p>
               </div>
             </div>

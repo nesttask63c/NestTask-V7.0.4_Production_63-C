@@ -29,11 +29,11 @@ export function OfflineSyncManager({ onSync }: OfflineSyncManagerProps) {
   useEffect(() => {
     if (isOffline) {
       setWasOffline(true);
-      setSyncMessage('You are currently offline. Changes will be synced when you reconnect.');
+      setSyncMessage('Network connection unavailable. Your changes will be synchronized automatically once the connection is restored.');
     } else if (wasOffline) {
       // We were offline but now we're online
       setShowSyncPrompt(true);
-      setSyncMessage('You\'re back online! Sync your changes?');
+      setSyncMessage('Connection restored. Would you like to synchronize your changes now?');
     }
   }, [isOffline, wasOffline]);
 
