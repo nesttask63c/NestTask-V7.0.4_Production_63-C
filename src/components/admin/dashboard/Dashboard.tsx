@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Users, Filter, Calendar, PieChart, Zap, SearchIcon, Bell, ChevronDown, ChevronUp, TrendingUp, BarChart2, BookOpen, Clock, Star, Award, Briefcase } from 'lucide-react';
+import { Activity, Users, Filter, Calendar, PieChart, Zap, TrendingUp, BarChart2, BookOpen, Clock, Star, Award, Briefcase } from 'lucide-react';
 import { UserActivity } from '../UserActivity';
 import { UserGraph } from './UserGraph';
 import type { User } from '../../../types/auth';
@@ -15,8 +15,6 @@ export function Dashboard({ users, tasks }: DashboardProps) {
   const [currentDate, setCurrentDate] = useState('');
   const [greetingTime, setGreetingTime] = useState('');
   const [isMobile, setIsMobile] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showAllActivity, setShowAllActivity] = useState(false);
   
   // User Analytics controls
   const [chartType, setChartType] = useState<'bar' | 'line'>('line');
@@ -123,91 +121,8 @@ export function Dashboard({ users, tasks }: DashboardProps) {
     return acc;
   }, {} as Record<string, number>);
 
-  const toggleShowAllActivity = () => {
-    setShowAllActivity(!showAllActivity);
-  };
-
   return (
     <div className="space-y-6 sm:space-y-8 pb-8">
-      {/* Top Navigation Bar */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm mb-6 animate-fade-in hidden sm:block">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4">
-          <div className="relative w-full max-w-md">
-            <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input 
-              type="search" 
-              placeholder="Search users, tasks, or courses..." 
-              className="pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 border-none dark:text-gray-200 transition-all duration-300"
-            />
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <button 
-                className="p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 relative hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-300"
-                onClick={() => setShowNotifications(!showNotifications)}
-              >
-                <Bell className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
-              </button>
-              
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-lg z-10 p-4 border border-gray-100 dark:border-gray-700 animate-fadeIn">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center justify-between">
-                    <span>Notifications</span>
-                    <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">3 new</span>
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium dark:text-white">5 new users joined today</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">2 hours ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <Activity className="w-4 h-4 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium dark:text-white">User activity increased by 24%</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yesterday</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                        <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium dark:text-white">New course materials added</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">1 day ago</p>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="w-full text-xs text-blue-600 dark:text-blue-400 mt-4 py-2 hover:underline font-medium">
-                    View all notifications
-                  </button>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-xl transition-all duration-300">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center text-white font-medium">
-                {adminUser?.name.charAt(0).toUpperCase() || 'A'}
-              </div>
-              <div className="hidden sm:block">
-                <div className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1">
-                  {adminUser?.name || 'Admin'}
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Administrator</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Welcome Section */}
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-2xl p-5 sm:p-6 text-white shadow-xl relative overflow-hidden animate-scale-in">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mt-16 -mr-16 blur-xl"></div>
@@ -409,7 +324,7 @@ export function Dashboard({ users, tasks }: DashboardProps) {
           </div>
             
             <div className="space-y-5">
-              {filteredUsers.slice(0, showAllActivity ? 6 : 3).map((user, index) => (
+              {filteredUsers.slice(0, 3).map((user, index) => (
                 <div key={user.id} className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center text-gray-700 dark:text-gray-300 font-medium text-sm flex-shrink-0">
                     {user.name.charAt(0).toUpperCase()}
@@ -429,25 +344,6 @@ export function Dashboard({ users, tasks }: DashboardProps) {
                 </div>
               ))}
             </div>
-            
-            {filteredUsers.length > 3 && (
-              <button 
-                onClick={toggleShowAllActivity}
-                className="mt-5 w-full py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors flex items-center justify-center"
-              >
-                {showAllActivity ? (
-                  <>
-                    <ChevronUp className="w-4 h-4 mr-1.5" />
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4 mr-1.5" />
-                    View more
-                  </>
-                )}
-              </button>
-            )}
           </div>
         </div>
       </div>
