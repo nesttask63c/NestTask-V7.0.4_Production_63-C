@@ -310,46 +310,125 @@ export default function App() {
     }
   };
 
+  // Add the missing function for category selection
+  const handleCategorySelect = useCallback((category: TaskCategory | null) => {
+    setSelectedCategory(category);
+    setStatFilter('all');
+  }, []);
+
   const renderContent = () => {
     switch (activePage) {
       case 'home':
         return (
-          <div>
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                {getStatTitle()}
+          <div className="space-y-8">
+            {/* Welcome Section */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 sm:p-8 text-white">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+                Welcome back, {user?.name || 'User'}!
               </h1>
-              
-              <TaskCategories 
-                selectedCategory={selectedCategory}
-                onSelect={handleCategorySelect}
-              />
-              
-              <div className="flex flex-wrap mt-6 gap-3">
-                {renderStatButton('all', ListTodo, 'All')}
-                {renderStatButton('overdue', AlertCircle, 'Due')}
-                {renderStatButton('in-progress', Clock, 'In Progress')}
-                {renderStatButton('completed', CheckCircle2, 'Completed')}
-              </div>
+              <p className="text-blue-100">
+                You have {taskStats.total} total tasks
+              </p>
             </div>
-            
-            {/* Use InstantTransition for the task list to prevent white flash */}
-            <InstantTransition>
-              <TaskList 
+
+            {/* Task Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <button
+                onClick={() => setStatFilter('all')}
+                className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${
+                  statFilter === 'all' ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <ListTodo className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {taskStats.total}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Tasks</p>
+              </button>
+
+              <button
+                onClick={() => setStatFilter('overdue')}
+                className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${
+                  statFilter === 'overdue' ? 'ring-2 ring-red-500 dark:ring-red-400' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {taskStats.overdue}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Due Tasks</p>
+              </button>
+
+              <button
+                onClick={() => setStatFilter('in-progress')}
+                className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${
+                  statFilter === 'in-progress' ? 'ring-2 ring-indigo-500 dark:ring-indigo-400' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                    <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {taskStats.inProgress}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">In Progress</p>
+              </button>
+
+              <button
+                onClick={() => setStatFilter('completed')}
+                className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${
+                  statFilter === 'completed' ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {taskStats.completed}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Completed</p>
+              </button>
+            </div>
+
+            {/* Task Categories */}
+            <TaskCategories
+              onCategorySelect={handleCategorySelect}
+              selectedCategory={selectedCategory}
+              categoryCounts={categoryCounts}
+            />
+
+            {/* Task List */}
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {getStatTitle()}
+                </h2>
+                {statFilter !== 'all' && (
+                  <button
+                    onClick={() => setStatFilter('all')}
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                  >
+                    View All Tasks
+                  </button>
+                )}
+              </div>
+              <TaskList
                 tasks={getFilteredTasks()}
-                onMarkComplete={handleMarkComplete}
-                onEdit={handleEditTask}
-                onDelete={handleDeleteTask}
-                loading={tasksLoading}
-                isEmpty={getFilteredTasks().length === 0}
-                emptyMessage={getEmptyMessage()}
-                showCourseLabels={true}
-                userMap={userMap}
-                onTaskClick={recordAction}
-                onRefresh={refreshTasks}
-                isOffline={isOffline}
+                showDeleteButton={false}
               />
-            </InstantTransition>
+            </div>
           </div>
         );
       case 'upcoming':
@@ -479,10 +558,7 @@ export default function App() {
 
             {/* Task Categories */}
             <TaskCategories
-              onCategorySelect={(category) => {
-                setSelectedCategory(category);
-                setStatFilter('all');
-              }}
+              onCategorySelect={handleCategorySelect}
               selectedCategory={selectedCategory}
               categoryCounts={categoryCounts}
             />
