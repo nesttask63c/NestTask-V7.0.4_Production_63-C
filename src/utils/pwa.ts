@@ -1,3 +1,5 @@
+import { STORES } from './offlineStorage';
+
 // Check if the app can be installed
 export function checkInstallability() {
   if ('BeforeInstallPromptEvent' in window) {
@@ -197,7 +199,8 @@ export async function initPWA() {
     Promise.resolve().then(setupNativePullToRefresh),
     Promise.resolve().then(disableZoom),
     Promise.resolve().then(setupKeepAlive),
-    Promise.resolve().then(setupOfflineDetection)
+    Promise.resolve().then(setupOfflineDetection),
+    Promise.resolve().then(ensureOfflineData)
   ]);
   
   // Log any errors but don't block the app
@@ -386,6 +389,103 @@ export function setupOfflineDetection() {
       });
     }
   }, healthCheckInterval);
+}
+
+// Ensure critical data is available offline
+async function ensureOfflineData() {
+  // Only run if we're online and IndexedDB is available
+  if (!navigator.onLine || !('indexedDB' in window)) return;
+  
+  try {
+    // Check if we have cached data for critical stores
+    const { openDatabase } = await import('./offlineStorage');
+    
+    // Get existing cached data count for critical stores
+    const stores = Object.values(STORES);
+    let needsCaching = false;
+    
+    // Check each critical store
+    for (const store of stores) {
+      try {
+        const db = await openDatabase();
+        const tx = db.transaction(store, 'readonly');
+        const countRequest = tx.objectStore(store).count();
+        
+        // Wait for the count operation to complete
+        const count = await new Promise<number>((resolve, reject) => {
+          countRequest.onsuccess = () => resolve(countRequest.result);
+          countRequest.onerror = () => reject(countRequest.error);
+        });
+        
+        if (count === 0) {
+          needsCaching = true;
+          console.log(`No cached data found for ${store}, will fetch data`);
+          break;
+        }
+      } catch (error) {
+        console.warn(`Error checking ${store} store:`, error);
+        needsCaching = true;
+      }
+    }
+    
+    // If any critical store needs data, trigger prefetching
+    if (needsCaching) {
+      const { prefetchResources, prefetchApiDataWithLoader } = await import('./prefetch');
+      
+      // Define critical data to prefetch
+      const criticalData = [
+        { 
+          type: 'api' as const, 
+          key: 'tasks', 
+          loader: {
+            tableName: 'tasks',
+            queryFn: (query: any) => query.select('*').order('due_date', { ascending: true }).limit(50),
+            storeName: STORES.TASKS
+          },
+          options: { priority: 'high' as const, forceCache: true }
+        },
+        { 
+          type: 'api' as const, 
+          key: 'routines', 
+          loader: {
+            tableName: 'routines',
+            queryFn: (query: any) => query.select('*'),
+            storeName: STORES.ROUTINES
+          },
+          options: { priority: 'high' as const, forceCache: true }
+        },
+        { 
+          type: 'api' as const, 
+          key: 'courses', 
+          loader: {
+            tableName: 'courses',
+            queryFn: (query: any) => query.select('*'),
+            storeName: STORES.COURSES
+          },
+          options: { priority: 'medium' as const, forceCache: true }
+        },
+        { 
+          type: 'api' as const, 
+          key: 'teachers', 
+          loader: {
+            tableName: 'teachers',
+            queryFn: (query: any) => query.select('*'),
+            storeName: STORES.TEACHERS
+          },
+          options: { priority: 'medium' as const, forceCache: true }
+        }
+      ];
+      
+      // Prefetch and cache critical data
+      console.log('Prefetching critical data for offline use...');
+      await prefetchResources(criticalData);
+      console.log('Critical data cached for offline use');
+    } else {
+      console.log('All critical stores have cached data for offline use');
+    }
+  } catch (error) {
+    console.error('Error ensuring offline data:', error);
+  }
 }
 
 // Helper function to convert VAPID key

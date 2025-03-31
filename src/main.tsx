@@ -170,6 +170,13 @@ Promise.resolve()
     // First tackle the connection optimizations
     establishConnectionOptimizations();
     
+    // Check if we're offline
+    if (!navigator.onLine) {
+      console.log('Starting app in offline mode - prioritizing cached data');
+      // Skip network operations when starting offline
+      return pwaPromise;
+    }
+    
     // Then start prefetching critical resources
     prefetchCriticalResources();
     

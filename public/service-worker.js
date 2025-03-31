@@ -195,44 +195,90 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
+    // Handle API requests with special caching
+    if (url.pathname.includes('/api/')) {
+      event.respondWith(
+        caches.match(event.request)
+          .then(cachedResponse => {
+            if (cachedResponse) {
+              // Return cached API response immediately when offline
+              if (!navigator.onLine) {
+                return cachedResponse;
+              }
+              
+              // When online, try network first, fall back to cache
+              return fetch(event.request)
+                .then(networkResponse => {
+                  // Cache the updated response
+                  if (networkResponse.ok) {
+                    const clonedResponse = networkResponse.clone();
+                    caches.open(CACHE_NAME)
+                      .then(cache => cache.put(event.request, clonedResponse));
+                  }
+                  return networkResponse;
+                })
+                .catch(() => cachedResponse);
+            }
+            
+            // No cache, try network
+            return fetch(event.request)
+              .then(networkResponse => {
+                if (networkResponse.ok) {
+                  const clonedResponse = networkResponse.clone();
+                  caches.open(CACHE_NAME)
+                    .then(cache => cache.put(event.request, clonedResponse));
+                }
+                return networkResponse;
+              });
+          })
+      );
+      return;
+    }
+
     // Improved app shell handling for navigation requests with robust offline fallback
     if (event.request.mode === 'navigate') {
       event.respondWith(
         (async () => {
-          // Try cache first for faster navigation
-          const cachedResponse = await caches.match(event.request);
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          
-          // If not in cache, try cached index.html for SPA routes
-          const isSpaRoute = SPA_ROUTES.some(route => 
-            url.pathname === route || url.pathname.startsWith(`${route}/`)
-          );
-          
-          if (isSpaRoute) {
-            const indexHtmlResponse = await caches.match('/index.html');
-            if (indexHtmlResponse) {
-              return indexHtmlResponse;
-            }
-          }
-          
-          // Try network as fallback
           try {
-            const networkResponse = await fetch(event.request);
-            
-            // If online, update the cache with the fresh content
-            if (networkResponse.ok) {
-              const cache = await caches.open(CACHE_NAME);
-              cache.put(event.request, networkResponse.clone());
-              return networkResponse;
+            // For navigation, try network first when online
+            if (navigator.onLine) {
+              try {
+                const networkResponse = await fetch(event.request);
+                if (networkResponse.ok) {
+                  // Cache the successful navigation response
+                  const cache = await caches.open(CACHE_NAME);
+                  cache.put(event.request, networkResponse.clone());
+                  return networkResponse;
+                }
+              } catch (error) {
+                console.log('Navigation fetch failed, falling back to cache', error);
+              }
             }
+            
+            // If offline or network request failed, try cache
+            const cachedResponse = await caches.match(event.request);
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            
+            // If not in cache, try cached index.html for SPA routes
+            const isSpaRoute = SPA_ROUTES.some(route => 
+              url.pathname === route || url.pathname.startsWith(`${route}/`)
+            );
+            
+            if (isSpaRoute || url.pathname === '/') {
+              const indexHtmlResponse = await caches.match('/index.html');
+              if (indexHtmlResponse) {
+                return indexHtmlResponse;
+              }
+            }
+            
+            // If all else fails, show the offline page
+            return caches.match(OFFLINE_URL);
           } catch (error) {
-            console.log('Fetch failed, already checked cache');
+            console.error('Navigation error handler:', error);
+            return caches.match(OFFLINE_URL);
           }
-          
-          // If all else fails, show the offline page
-          return caches.match(OFFLINE_URL);
         })()
       );
       return;
