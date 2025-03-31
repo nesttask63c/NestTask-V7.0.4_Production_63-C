@@ -38,15 +38,15 @@ function initBackgroundSync() {
   if ('sync' in self.registration) {
     // Create queues for different types of operations
     taskQueue = new workbox.backgroundSync.Queue('taskQueue', {
-      maxRetentionTime: 24 * 60 // Retry for up to 24 hours (in minutes)
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days (in minutes) - Increased from 24 hours
     });
     
     routineQueue = new workbox.backgroundSync.Queue('routineQueue', {
-      maxRetentionTime: 24 * 60
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days - Increased from 24 hours
     });
     
     courseTeacherQueue = new workbox.backgroundSync.Queue('courseTeacherQueue', {
-      maxRetentionTime: 24 * 60
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days - Increased from 24 hours
     });
     
     console.log('Background sync initialized');
@@ -468,3 +468,67 @@ async function safeCacheMatch(cacheName, request) {
     return null;
   }
 }
+
+// Add a message handler for keep-alive pings
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'KEEP_ALIVE') {
+    console.log('Keep-alive ping received at', new Date(event.data.timestamp).toISOString());
+    
+    // Respond to the keep-alive to confirm service worker is active
+    if (event.source) {
+      event.source.postMessage({
+        type: 'KEEP_ALIVE_RESPONSE',
+        timestamp: Date.now()
+      });
+    }
+    
+    // Optional: refresh certain caches if needed
+    // This helps keep critical data fresh in long offline periods
+    if (event.data.reason === 'visibilitychange') {
+      console.log('Refreshing critical caches on visibility change');
+      
+      caches.open(CACHE_NAME).then(cache => {
+        // Refresh the main index.html on visibility change
+        fetch('/index.html')
+          .then(response => {
+            if (response.ok) {
+              cache.put('/index.html', response);
+            }
+          })
+          .catch(err => console.error('Failed to refresh index.html:', err));
+      });
+    }
+  } else if (event.data && event.data.type === 'SYNC_NOW') {
+    console.log('SYNC_NOW message received, attempting immediate sync');
+    
+    // Verify workbox and queue availability
+    if ('workbox' in self && taskQueue && routineQueue && courseTeacherQueue) {
+      // Try to perform sync for all queues
+      Promise.allSettled([
+        taskQueue.replayRequests(),
+        routineQueue.replayRequests(), 
+        courseTeacherQueue.replayRequests()
+      ]).then(results => {
+        console.log('Sync attempts completed:', results);
+        
+        // Notify all clients that sync was attempted
+        self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'SYNC_NOW_COMPLETED',
+              results: results.map(r => r.status)
+            });
+          });
+        });
+      });
+    } else {
+      console.warn('Cannot perform immediate sync: workbox or queues not available');
+      if (event.source) {
+        event.source.postMessage({
+          type: 'SYNC_NOW_ERROR',
+          error: 'Background sync not available'
+        });
+      }
+    }
+  }
+});

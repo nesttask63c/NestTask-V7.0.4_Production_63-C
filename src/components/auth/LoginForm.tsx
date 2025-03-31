@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Mail, Lock, Loader2, Eye, EyeOff, LogIn, Wifi, WifiOff } from 'lucide-react';
+import { useState } from 'react';
+import { Mail, Lock, Loader2, Eye, EyeOff, LogIn } from 'lucide-react';
 import { AuthError } from './AuthError';
 import { AuthInput } from './AuthInput';
 import { AuthSubmitButton } from './AuthSubmitButton';
 import { validateEmail, validatePassword } from '../../utils/authErrors';
-import { testConnection } from '../../lib/supabase';
 import type { LoginCredentials } from '../../types/auth';
 
 interface LoginFormProps {
@@ -24,21 +23,6 @@ export function LoginForm({ onSubmit, onSwitchToSignup, onForgotPassword, error 
   const [touched, setTouched] = useState({ email: false, password: false });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
-
-  useEffect(() => {
-    checkConnection();
-  }, []);
-
-  const checkConnection = async () => {
-    setConnectionStatus('checking');
-    try {
-      const isConnected = await testConnection();
-      setConnectionStatus(isConnected ? 'connected' : 'disconnected');
-    } catch (err) {
-      setConnectionStatus('disconnected');
-    }
-  };
 
   const validateForm = () => {
     if (!validateEmail(credentials.email)) {
@@ -58,45 +42,11 @@ export function LoginForm({ onSubmit, onSwitchToSignup, onForgotPassword, error 
 
     if (!validateForm()) return;
 
-    if (connectionStatus !== 'connected') {
-      const isConnected = await testConnection();
-      if (!isConnected) {
-        setLocalError('Unable to connect to the server. Please check your internet connection.');
-        return;
-      }
-      setConnectionStatus('connected');
-    }
-
     setIsLoading(true);
     try {
-      setLocalError(null);
-      
-      let attempts = 0;
-      const maxAttempts = 2;
-      
-      while (attempts < maxAttempts) {
-        try {
-          await onSubmit(credentials, rememberMe);
-          break;
-        } catch (err: any) {
-          attempts++;
-          console.error(`Login attempt ${attempts} failed:`, err);
-          
-          if (attempts >= maxAttempts) {
-            throw err;
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
+      await onSubmit(credentials, rememberMe);
     } catch (err: any) {
-      if (err.message?.includes('network') || err.message?.includes('connection')) {
-        setLocalError('Network connection issue. Please check your internet connection and try again.');
-      } else if (err.message?.includes('Invalid login credentials') || err.message?.includes('invalid')) {
-        setLocalError('Invalid email or password. Please check your credentials and try again.');
-      } else {
-        setLocalError(err.message || 'An unknown error occurred');
-      }
+      setLocalError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -121,21 +71,6 @@ export function LoginForm({ onSubmit, onSwitchToSignup, onForgotPassword, error 
           Sign in to continue managing your tasks
         </p>
       </div>
-      
-      {connectionStatus === 'disconnected' && (
-        <div className="mb-4 p-3 bg-amber-100 text-amber-700 rounded-md flex items-center gap-2">
-          <WifiOff className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm">
-            Connection to server unavailable. 
-            <button 
-              onClick={checkConnection}
-              className="ml-2 underline hover:text-amber-800"
-            >
-              Retry connection
-            </button>
-          </span>
-        </div>
-      )}
       
       {(error || localError) && <AuthError message={error || localError || ''} />}
 

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, KeyboardEvent, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import type { KeyboardEvent } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isToday, parseISO, addMonths, getDay, getYear, setYear } from 'date-fns';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { Task } from '../types/task';
@@ -168,11 +169,15 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
     return Array.from({ length: 21 }, (_, i) => currentYear - 10 + i);
   }, [currentYear]);
 
+  const isMobileView = () => {
+    return window.innerWidth < 768;
+  };
+
   // Check if device is mobile and adjust UI accordingly
   useEffect(() => {
     // Set mobile flag based on screen width
     const handleResize = () => {
-      isMobileRef.current = window.innerWidth < 768;
+      isMobileRef.current = isMobileView();
     };
 
     // Initial check
@@ -759,7 +764,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
           animate="visible"
           exit="exit"
           transition={transitionProps}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/30 backdrop-blur-sm"
           style={{ 
             willChange: 'opacity, transform',
             translateZ: 0,
@@ -767,23 +772,28 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
           }}
         >
           <div 
-            className="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden w-full max-w-[95vw] sm:max-w-md md:max-w-lg max-h-[95vh] sm:max-h-[80vh] touch-manipulation"
+            className="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden w-[92vw] sm:w-full sm:max-w-md md:max-w-lg lg:max-w-xl mx-auto my-auto max-h-[95vh] sm:max-h-[85vh] touch-manipulation"
             ref={calendarRef}
             role="dialog"
             aria-modal="true"
             aria-label="Monthly Calendar"
             onClick={(e) => e.stopPropagation()}
-            onTouchStart={() => {
-              // No need to stop propagation here
-            }}
-            onTouchMove={() => {
-              // No need to stop propagation here
-            }}
-            onTouchEnd={() => {
-              // No need to stop propagation here
-            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             onKeyDown={handleContainerKeyDown}
             tabIndex={0}
+            style={{
+              margin: '0 auto',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              WebkitOverflowScrolling: 'touch',
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: `translate(-50%, -50%) translateZ(0)`,
+              maxWidth: isMobileRef.current ? 'calc(100% - 16px)' : undefined
+            }}
           >
             {/* Calendar header with optimized rendering */}
             <div className="flex justify-between items-center p-3 sm:p-4 border-b border-gray-100 dark:border-gray-700">
@@ -879,7 +889,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="calendar-container"
+                  className="calendar-container w-full"
                   onTouchStart={(e) => {
                     // Only handle touch events at container level if not on a button
                     if (!(e.target as HTMLElement).closest('button')) {
@@ -898,9 +908,9 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                   }}
                 >
                   {/* Calendar Grid - performance optimized */}
-                  <div className="p-2 sm:p-4 pb-4 sm:pb-6">
+                  <div className="p-2 sm:p-3 md:p-4 pb-4 sm:pb-5 md:pb-6 overflow-x-hidden w-full">
                     {/* Weekday Headers - static render for performance */}
-                    <div className="grid grid-cols-7 mb-2 sm:mb-4">
+                    <div className="grid grid-cols-7 mb-2 sm:mb-3 md:mb-4 w-full">
                       {WEEKDAYS.map(day => (
                         <div key={day} className="text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 py-1 sm:py-2">
                           {isMobileRef.current ? day.charAt(0) : day}
@@ -909,7 +919,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                     </div>
 
                     {/* Calendar Days - performance optimized grid */}
-                    <div className="grid grid-cols-7 gap-1 sm:gap-2.5 content-start">
+                    <div className="grid grid-cols-7 gap-1 sm:gap-1.5 md:gap-2.5 content-start w-full">
                       {calendarDays.map((date, index) => {
                         if (!date) {
                           // Empty cell for padding - render minimal content
@@ -958,6 +968,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                               relative aspect-square rounded-md
                               flex flex-col items-center justify-center
                               touch-manipulation border border-transparent
+                              min-w-[28px] min-h-[28px] sm:min-w-[32px] sm:min-h-[32px] md:min-w-[36px] md:min-h-[36px]
                               ${isSelected
                                 ? 'bg-blue-500 text-white shadow-md z-10'
                                 : isTodayDate
@@ -981,7 +992,7 @@ const MonthlyCalendarBase = ({ isOpen, onClose, selectedDate, onSelectDate, task
                           >
                             {/* Date Number - simplified rendering */}
                             <span className={`
-                              text-xs sm:text-sm font-medium
+                              text-xs sm:text-sm md:text-base font-medium
                               ${isSelected
                                 ? 'text-white'
                                 : isTodayDate

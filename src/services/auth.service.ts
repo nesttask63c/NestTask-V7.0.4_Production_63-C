@@ -15,14 +15,11 @@ export async function loginUser({ email, password }: LoginCredentials): Promise<
       throw new Error('Email and password are required');
     }
 
-    // Clean up any stale sessions first
-    await supabase.auth.signOut({ scope: 'local' });
-    
-    // Clear any stored session data to start fresh
-    localStorage.removeItem('supabase.auth.token');
-    
-    // Add a short delay to ensure the signOut completes
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Set session persistence by ensuring we have a clean session state
+    await supabase.auth.setSession({
+      access_token: '',
+      refresh_token: ''
+    });
 
     // Set remember me to always true for persistent login
     localStorage.setItem('nesttask_remember_me', 'true');
@@ -30,27 +27,24 @@ export async function loginUser({ email, password }: LoginCredentials): Promise<
     // Store the email for easy login in the future
     localStorage.setItem('nesttask_saved_email', email);
 
-    // Sign in with password
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
-      email: email.trim(), 
+      email, 
       password
     });
     
-    if (authError) {
-      console.error('Supabase auth error:', authError);
-      throw authError;
-    }
-    
+    if (authError) throw authError;
     if (!authData?.user) throw new Error('No user data received');
 
-    // Store the session in localStorage for persistence
+    // Store the session in localStorage AND IndexedDB for maximum persistence
     if (authData.session) {
       // Set up a periodic token refresh to ensure the session never expires
+      // This runs every 12 hours to refresh the token silently in the background
       setupTokenRefresh(authData.session.refresh_token);
       
       // Store session data for persistence across browser restarts
       localStorage.setItem('supabase.auth.token', JSON.stringify(authData.session));
       
+      // Also store in persistent storage for redundancy
       try {
         if ('indexedDB' in window) {
           const request = indexedDB.open('nesttask-auth-storage', 1);
@@ -128,21 +122,6 @@ export async function loginUser({ email, password }: LoginCredentials): Promise<
     return mapDbUserToUser(profile);
   } catch (error: any) {
     console.error('Login error:', error);
-    
-    // Provide more specific error messages for common issues
-    if (error.message?.includes('Invalid login credentials') || 
-        error.message?.includes('Email not confirmed') ||
-        error.message?.includes('Invalid email or password')) {
-      throw new Error('Invalid email or password. Please try again.');
-    }
-    
-    // Network related errors
-    if (error.message?.includes('Failed to fetch') || 
-        error.message?.includes('NetworkError') ||
-        error.message?.includes('network connection')) {
-      throw new Error('Network error. Please check your internet connection and try again.');
-    }
-    
     throw new Error(getAuthErrorMessage(error));
   }
 }

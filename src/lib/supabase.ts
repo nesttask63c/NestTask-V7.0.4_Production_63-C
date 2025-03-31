@@ -9,129 +9,195 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Optimize session storage to use IndexedDB for better performance
-const getCustomStorage = () => {
-  return {
-    async getItem(key: string) {
+const customStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    // Try to get from IndexedDB first for more persistent storage
+    if ('indexedDB' in window) {
       try {
-        // Try to get from IndexedDB first for more persistent storage
-        if ('indexedDB' in window) {
-          return new Promise<string | null>((resolve) => {
-            const request = indexedDB.open('supabase-auth', 1);
+        // Increase version to ensure schema is current
+        const request = indexedDB.open('supabase-auth', 2);
+        
+        // Make sure store exists
+        request.onupgradeneeded = (event: any) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('auth')) {
+            db.createObjectStore('auth', { keyPath: 'key' });
+          }
+        };
+        
+        return new Promise<string | null>((resolve, reject) => {
+          request.onsuccess = (event: any) => {
+            const db = event.target.result;
+            const transaction = db.transaction('auth', 'readonly');
+            const store = transaction.objectStore('auth');
+            const getRequest = store.get(key);
             
-            request.onupgradeneeded = () => {
-              const db = request.result;
-              if (!db.objectStoreNames.contains('keyval')) {
-                db.createObjectStore('keyval');
+            getRequest.onsuccess = () => {
+              if (getRequest.result) {
+                // Check if the session is expired based on exp claim in JWT
+                if (key === 'supabase.auth.token') {
+                  try {
+                    const session = JSON.parse(getRequest.result.value);
+                    
+                    if (session && session.access_token) {
+                      // Parse the JWT to get expiration
+                      const payload = JSON.parse(atob(session.access_token.split('.')[1]));
+                      const exp = payload.exp * 1000; // convert to ms
+                      
+                      // If token will expire in less than 7 days in offline mode,
+                      // extend it by 30 days to ensure offline functionality
+                      if (exp - Date.now() < 7 * 24 * 60 * 60 * 1000 && !navigator.onLine) {
+                        console.log('Extending session token expiration for offline use');
+                        
+                        // Set a new expiration 30 days from now
+                        const newExp = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                        payload.exp = Math.floor(newExp / 1000);
+                        
+                        // We can't modify the JWT itself, but we can update the expires_at
+                        // in the session object to prevent auto-logout
+                        session.expires_at = Math.floor(newExp / 1000);
+                        
+                        // Store the modified session
+                        customStorage.setItem(key, JSON.stringify(session));
+                      }
+                    }
+                  } catch (parseError) {
+                    console.error('Error parsing auth token:', parseError);
+                  }
+                }
+                
+                resolve(getRequest.result.value);
+              } else {
+                // If not in IndexedDB, check localStorage
+                resolve(localStorage.getItem(key));
               }
             };
             
-            request.onsuccess = () => {
-              const db = request.result;
-              const tx = db.transaction('keyval', 'readonly');
-              const store = tx.objectStore('keyval');
-              const getRequest = store.get(key);
-              
-              getRequest.onsuccess = () => {
-                resolve(getRequest.result);
-              };
-              
-              getRequest.onerror = () => {
-                resolve(localStorage.getItem(key));
-              };
-              
-              tx.oncomplete = () => {
-                db.close();
-              };
-            };
-            
-            request.onerror = () => {
+            getRequest.onerror = (error: any) => {
+              console.error('Error getting auth from IndexedDB:', error);
+              // Fall back to localStorage
               resolve(localStorage.getItem(key));
             };
-          });
-        }
+          };
+          
+          request.onerror = (error: any) => {
+            console.error('Error accessing IndexedDB:', error);
+            // Fall back to localStorage if IndexedDB is not available or fails
+            resolve(localStorage.getItem(key));
+          };
+        });
       } catch (error) {
         console.error('Error accessing IndexedDB:', error);
+        // Fall back to localStorage if IndexedDB is not available or fails
+        return localStorage.getItem(key);
       }
-      
-      // Fall back to localStorage if IndexedDB is not available or fails
-      return localStorage.getItem(key);
-    },
+    }
     
-    async setItem(key: string, value: string) {
+    // Fall back to localStorage if IndexedDB is not available
+    return localStorage.getItem(key);
+  },
+  
+  setItem: async (key: string, value: string): Promise<void> => {
+    // Store in both IndexedDB for persistence and localStorage for quick access
+    if ('indexedDB' in window) {
       try {
-        // Store in both IndexedDB for persistence and localStorage for quick access
-        if ('indexedDB' in window) {
-          return new Promise<void>((resolve) => {
-            const request = indexedDB.open('supabase-auth', 1);
+        // Increase version to ensure schema is current
+        const request = indexedDB.open('supabase-auth', 2);
+        
+        // Make sure store exists
+        request.onupgradeneeded = (event: any) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('auth')) {
+            db.createObjectStore('auth', { keyPath: 'key' });
+          }
+        };
+        
+        return new Promise<void>((resolve, reject) => {
+          request.onsuccess = (event: any) => {
+            const db = event.target.result;
+            const transaction = db.transaction('auth', 'readwrite');
+            const store = transaction.objectStore('auth');
             
-            request.onupgradeneeded = () => {
-              const db = request.result;
-              if (!db.objectStoreNames.contains('keyval')) {
-                db.createObjectStore('keyval');
-              }
-            };
+            // Store with current timestamp for debugging
+            const storeRequest = store.put({ 
+              key, 
+              value,
+              timestamp: Date.now()
+            });
             
-            request.onsuccess = () => {
-              const db = request.result;
-              const tx = db.transaction('keyval', 'readwrite');
-              const store = tx.objectStore('keyval');
-              store.put(value, key);
-              
-              tx.oncomplete = () => {
-                db.close();
-                localStorage.setItem(key, value);
-                resolve();
-              };
-            };
-            
-            request.onerror = () => {
+            storeRequest.onsuccess = () => {
+              // Also store in localStorage as backup
               localStorage.setItem(key, value);
               resolve();
             };
-          });
-        }
+            
+            storeRequest.onerror = (error: any) => {
+              console.error('Error writing to IndexedDB:', error);
+              localStorage.setItem(key, value);
+              resolve();
+            };
+          };
+          
+          request.onerror = (error: any) => {
+            console.error('Error writing to IndexedDB:', error);
+            localStorage.setItem(key, value);
+            resolve();
+          };
+        });
       } catch (error) {
         console.error('Error writing to IndexedDB:', error);
+        // Fall back to localStorage if IndexedDB is not available or fails
+        localStorage.setItem(key, value);
       }
-      
-      // Fall back to localStorage if IndexedDB is not available or fails
-      localStorage.setItem(key, value);
-    },
+    }
     
-    async removeItem(key: string) {
+    // Fall back to localStorage if IndexedDB is not available
+    localStorage.setItem(key, value);
+  },
+  
+  removeItem: async (key: string): Promise<void> => {
+    // Remove from both IndexedDB and localStorage
+    if ('indexedDB' in window) {
       try {
-        // Remove from both IndexedDB and localStorage
-        if ('indexedDB' in window) {
-          return new Promise<void>((resolve) => {
-            const request = indexedDB.open('supabase-auth', 1);
+        // Increase version to ensure schema is current
+        const request = indexedDB.open('supabase-auth', 2);
+        
+        return new Promise<void>((resolve, reject) => {
+          request.onsuccess = (event: any) => {
+            const db = event.target.result;
+            const transaction = db.transaction('auth', 'readwrite');
+            const store = transaction.objectStore('auth');
+            const deleteRequest = store.delete(key);
             
-            request.onsuccess = () => {
-              const db = request.result;
-              const tx = db.transaction('keyval', 'readwrite');
-              const store = tx.objectStore('keyval');
-              store.delete(key);
-              
-              tx.oncomplete = () => {
-                db.close();
-                localStorage.removeItem(key);
-                resolve();
-              };
-            };
-            
-            request.onerror = () => {
+            deleteRequest.onsuccess = () => {
+              // Also remove from localStorage
               localStorage.removeItem(key);
               resolve();
             };
-          });
-        }
+            
+            deleteRequest.onerror = (error: any) => {
+              console.error('Error removing from IndexedDB:', error);
+              localStorage.removeItem(key);
+              resolve();
+            };
+          };
+          
+          request.onerror = (error: any) => {
+            console.error('Error removing from IndexedDB:', error);
+            localStorage.removeItem(key);
+            resolve();
+          };
+        });
       } catch (error) {
         console.error('Error removing from IndexedDB:', error);
+        // Fall back to localStorage if IndexedDB is not available or fails
+        localStorage.removeItem(key);
       }
-      
-      // Fall back to localStorage if IndexedDB is not available or fails
-      localStorage.removeItem(key);
     }
-  };
+    
+    // Fall back to localStorage if IndexedDB is not available
+    localStorage.removeItem(key);
+  }
 };
 
 // Cache for connection state to avoid multiple retries
@@ -146,7 +212,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
-    storage: getCustomStorage(),
+    storage: customStorage,
     storageKey: 'nesttask_supabase_auth',
   },
   global: {
@@ -161,49 +227,38 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
       eventsPerSecond: 10
-    },
-    timeout: 30000 // 30 second timeout
+    }
   }
 });
 
-// Add custom retry logic for fetching
-const originalFetch = window.fetch;
-window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+// Fetch with retry implementation using exponential backoff
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 300) {
   try {
-    // Apply custom logic only to Supabase requests
-    if (typeof input === 'string' && input.includes(supabaseUrl)) {
-      // Add timestamp to bypass cache for auth-related requests
-      const url = input.includes('auth') ? 
-        `${input}${input.includes('?') ? '&' : '?'}_t=${Date.now()}` : 
-        input;
-      
-      // Add no-cache headers
-      const updatedInit = {
-        ...init,
-        headers: {
-          ...init?.headers,
-          'Cache-Control': 'no-cache, no-store',
-          'Pragma': 'no-cache'
-        }
-      };
-      
-      try {
-        return await originalFetch(url, updatedInit);
-      } catch (error) {
-        console.error('Fetch error:', error);
-        // Try once more after a delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return await originalFetch(url, updatedInit);
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       }
+    });
+    
+    // If response status indicates a server error, retry
+    if (response.status >= 500 && response.status < 600 && retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
     
-    // Pass through for all other requests
-    return originalFetch(input, init);
+    return response;
   } catch (error) {
-    console.error('Global fetch error:', error);
-    return originalFetch(input, init);
+    // Only retry on network errors, not on client errors
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw error;
   }
-};
+}
 
 // Function to test connection with debouncing and caching
 export async function testConnection() {

@@ -71,7 +71,7 @@ const staticAssetsStrategy = new CacheFirst({
     }),
     new ExpirationPlugin({
       maxEntries: 200, // Increased from 150
-      maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+      maxAgeSeconds: 90 * 24 * 60 * 60, // 90 Days (increased from 30 days)
       purgeOnQuotaError: true // Delete old entries when cache is full
     }),
   ],
@@ -101,7 +101,7 @@ registerRoute(
     plugins: [
       new ExpirationPlugin({
         maxEntries: 150, // Increased from 100
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+        maxAgeSeconds: 90 * 24 * 60 * 60, // 90 Days (increased from 30 days)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
       new CacheableResponsePlugin({
@@ -133,7 +133,7 @@ registerRoute(
       }),
       new ExpirationPlugin({
         maxEntries: 150, // Increased from 100
-        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days (increased from 7 days)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -163,7 +163,7 @@ registerRoute(
       }),
       new ExpirationPlugin({
         maxEntries: 50, // Increased from 30
-        maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+        maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year (no change)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -200,7 +200,7 @@ registerRoute(
       }),
       new ExpirationPlugin({
         maxEntries: 50, // Increased from 30
-        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days (increased from 7 days)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -225,7 +225,7 @@ registerRoute(
     plugins: [
       new ExpirationPlugin({
         maxEntries: 200, // Increased from 150
-        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days (increased from 24 hours)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -257,7 +257,7 @@ registerRoute(
       }),
       new ExpirationPlugin({
         maxEntries: 150, // Increased from 100
-        maxAgeSeconds: 12 * 60 * 60, // 12 hours
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days (increased from 12 hours)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -291,7 +291,7 @@ registerRoute(
       }),
       new ExpirationPlugin({
         maxEntries: 250, // Increased from 200
-        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days (increased from 24 hours)
         purgeOnQuotaError: true // Delete old entries when cache is full
       }),
     ],
@@ -722,4 +722,45 @@ self.addEventListener('error', (event) => {
 // Add an unhandled rejection handler
 self.addEventListener('unhandledrejection', (event) => {
   console.error('Service Worker unhandled rejection:', event.reason);
+});
+
+// Add a message handler for keep-alive pings
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'KEEP_ALIVE') {
+    console.log('Keep-alive ping received at', new Date(event.data.timestamp).toISOString());
+    
+    // Respond to the keep-alive to confirm service worker is active
+    if (event.source) {
+      event.source.postMessage({
+        type: 'KEEP_ALIVE_RESPONSE',
+        timestamp: Date.now()
+      });
+    }
+    
+    // Reset any internal timers to keep the service worker active
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    self.registration.active?.postMessage({
+      type: 'INTERNAL_KEEP_ALIVE'
+    });
+  } else if (event.data && event.data.type === 'SYNC_NOW') {
+    console.log('SYNC_NOW message received, attempting immediate sync');
+    
+    // Try to perform sync for all queues
+    Promise.allSettled([
+      taskSyncQueue.replayRequests(),
+      routineSyncQueue.replayRequests(),
+      courseTeacherSyncQueue.replayRequests()
+    ]).then(results => {
+      console.log('Sync attempts completed:', results);
+      
+      // Notify client that sync was attempted
+      if (event.source) {
+        event.source.postMessage({
+          type: 'SYNC_NOW_COMPLETED',
+          results: results.map(r => r.status)
+        });
+      }
+    });
+  }
 });

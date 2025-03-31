@@ -154,11 +154,13 @@ function schedulePeriodicUpdates(registration: ServiceWorkerRegistration) {
   // Schedule next update when user is likely to be idle
   if ('requestIdleCallback' in window) {
     (window as any).requestIdleCallback(() => {
-      setTimeout(() => schedulePeriodicUpdates(registration), 60 * 60 * 1000);
+      // Increase update interval to 4 hours (was 1 hour)
+      setTimeout(() => schedulePeriodicUpdates(registration), 4 * 60 * 60 * 1000);
     });
   } else {
     // Fallback for browsers without requestIdleCallback
-    setTimeout(() => schedulePeriodicUpdates(registration), 60 * 60 * 1000);
+    // Increase update interval to 4 hours (was 1 hour)
+    setTimeout(() => schedulePeriodicUpdates(registration), 4 * 60 * 60 * 1000);
   }
 }
 
@@ -169,7 +171,9 @@ export async function initPWA() {
     Promise.resolve().then(checkInstallability),
     Promise.resolve().then(registerServiceWorker),
     Promise.resolve().then(setupNativePullToRefresh),
-    Promise.resolve().then(disableZoom)
+    Promise.resolve().then(disableZoom),
+    Promise.resolve().then(setupKeepAlive),
+    Promise.resolve().then(setupOfflineDetection)
   ]);
   
   // Log any errors but don't block the app
@@ -210,6 +214,131 @@ export function disableZoom() {
   }, { passive: false });
   
   console.log('Zoom disabled on mobile devices');
+}
+
+// New function to keep the service worker alive
+export function setupKeepAlive() {
+  const keepAliveInterval = 10 * 60 * 1000; // 10 minutes
+  
+  // Set up a periodic ping to keep the service worker active
+  setInterval(() => {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      // Send a keep-alive message to the service worker
+      navigator.serviceWorker.controller.postMessage({
+        type: 'KEEP_ALIVE',
+        timestamp: Date.now()
+      });
+      
+      console.log('Service worker keep-alive ping sent');
+    }
+  }, keepAliveInterval);
+  
+  // Also ping on visibility changes to immediately reactivate when user returns
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && 
+        'serviceWorker' in navigator && 
+        navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'KEEP_ALIVE',
+        timestamp: Date.now(),
+        reason: 'visibilitychange'
+      });
+      console.log('Service worker keep-alive ping sent on visibility change');
+    }
+  });
+}
+
+// Setup offline detection and notification
+export function setupOfflineDetection() {
+  // Track last known state to avoid duplicate notifications
+  let wasOffline = !navigator.onLine;
+  
+  // Set initial offline status
+  if (!navigator.onLine) {
+    console.log('App starting in offline mode');
+    document.body.classList.add('offline-mode');
+    
+    // Dispatch offline event for app to handle
+    window.dispatchEvent(new CustomEvent('app-offline'));
+  }
+  
+  // Setup online event listener
+  window.addEventListener('online', () => {
+    if (wasOffline) {
+      console.log('App is back online');
+      document.body.classList.remove('offline-mode');
+      
+      // Create and show notification
+      if ('Notification' in window) {
+        // Request notification permission if needed
+        if (Notification.permission === 'granted') {
+          new Notification('NestTask is Online', {
+            body: 'Your connection has been restored. All your changes will now be synchronized.',
+            icon: '/icons/icon-192x192.png'
+          });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission();
+        }
+      }
+      
+      // Also dispatch an event for the app to handle
+      window.dispatchEvent(new CustomEvent('app-online'));
+      
+      // Attempt to sync any pending changes
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SYNC_NOW'
+        });
+      }
+    }
+    wasOffline = false;
+  });
+  
+  // Setup offline event listener
+  window.addEventListener('offline', () => {
+    console.log('App is now offline');
+    document.body.classList.add('offline-mode');
+    wasOffline = true;
+    
+    // Create and show notification
+    if ('Notification' in window) {
+      // Request notification permission if needed
+      if (Notification.permission === 'granted') {
+        const offlineNotification = new Notification('NestTask is Offline', {
+          body: 'You are now working offline. Your changes will be synchronized when you reconnect.',
+          icon: '/icons/icon-192x192.png',
+          tag: 'offline-alert'
+        });
+        
+        // Auto-close notification after 5 seconds
+        setTimeout(() => offlineNotification.close(), 5000);
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+    
+    // Dispatch offline event for app to handle
+    window.dispatchEvent(new CustomEvent('app-offline'));
+  });
+  
+  // Add CSS for offline indication
+  const style = document.createElement('style');
+  style.textContent = `
+    .offline-mode::after {
+      content: 'OFFLINE MODE';
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 9999;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // Helper function to convert VAPID key
