@@ -173,6 +173,22 @@ Promise.resolve()
     // Check if we're offline
     if (!navigator.onLine) {
       console.log('Starting app in offline mode - prioritizing cached data');
+      
+      // Force load offline data from IndexedDB
+      import('./utils/offlineStorage').then(({ forceLoadOfflineData }) => {
+        forceLoadOfflineData().then(data => {
+          if (data) {
+            console.log('Successfully pre-loaded offline data:',
+              Object.entries(data).map(([key, items]) => 
+                `${key}: ${Array.isArray(items) ? items.length : 0} items`
+              ).join(', ')
+            );
+          } else {
+            console.warn('No offline data available or failed to load');
+          }
+        });
+      });
+      
       // Skip network operations when starting offline
       return pwaPromise;
     }

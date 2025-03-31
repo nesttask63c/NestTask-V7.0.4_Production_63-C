@@ -128,6 +128,45 @@ const SPA_ROUTES = [
   '/profile',
 ];
 
+// Add a function to check IndexedDB for data
+async function checkIndexedDBData() {
+  try {
+    // Try to open the database
+    const request = indexedDB.open('nesttask_offline_db', 4);
+    
+    return new Promise((resolve, reject) => {
+      request.onerror = () => resolve(false);
+      
+      request.onsuccess = () => {
+        try {
+          const db = request.result;
+          // Check if we have tasks table
+          if (!db.objectStoreNames.contains('tasks')) {
+            resolve(false);
+            return;
+          }
+          
+          // Try to count items in tasks table
+          const transaction = db.transaction('tasks', 'readonly');
+          const store = transaction.objectStore('tasks');
+          const countRequest = store.count();
+          
+          countRequest.onsuccess = () => {
+            // If we have data, resolve true
+            resolve(countRequest.result > 0);
+          };
+          
+          countRequest.onerror = () => resolve(false);
+        } catch (e) {
+          resolve(false);
+        }
+      };
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
 // Fetch event - stale-while-revalidate strategy for assets, network-first for API
 self.addEventListener('fetch', (event) => {
   // Handle non-GET requests with background sync for offline support
@@ -239,8 +278,22 @@ self.addEventListener('fetch', (event) => {
     if (event.request.mode === 'navigate') {
       event.respondWith(
         (async () => {
+          // First check if we have any data in IndexedDB
+          const hasIndexedDBData = await checkIndexedDBData();
+          const isHomePage = url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/home';
+          
           try {
-            // For navigation, try network first when online
+            // If this is home page and we have cached data, always serve from cache first
+            if (isHomePage && hasIndexedDBData) {
+              console.log('Home page request with cached data available - serving from cache');
+              // Check cache first for home page when we have data
+              const cachedResponse = await caches.match('/index.html');
+              if (cachedResponse) {
+                return cachedResponse;
+              }
+            }
+            
+            // For other pages or when online, try network first
             if (navigator.onLine) {
               try {
                 const networkResponse = await fetch(event.request);

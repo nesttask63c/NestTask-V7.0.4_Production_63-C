@@ -350,4 +350,95 @@ export async function clearPendingOperations(storePrefix: string): Promise<void>
     console.error('Error clearing pending operations:', error);
     throw error;
   }
+}
+
+/**
+ * Creates a wrapper for API calls that automatically falls back to IndexedDB when offline
+ * @param apiCall Function that performs the network request
+ * @param storeName The store to check for cached data
+ * @param filterFn Optional function to filter cached data (default returns all)
+ */
+export async function withOfflineFallback<T>(
+  apiCall: () => Promise<T>,
+  storeName: string,
+  filterFn: (item: any) => boolean = () => true
+): Promise<T> {
+  try {
+    // If online, try the API call first
+    if (navigator.onLine) {
+      try {
+        const data = await apiCall();
+        return data;
+      } catch (error) {
+        console.warn(`API call failed, falling back to cached data for ${storeName}:`, error);
+        // Continue to fallback if API call fails
+      }
+    }
+    
+    // If offline or API call failed, get from IndexedDB
+    console.log(`Loading offline data from ${storeName}`);
+    const cachedData = await getAllFromIndexedDB(storeName);
+    const filteredData = cachedData.filter(filterFn);
+    
+    // If we have cached data, return it
+    if (filteredData.length > 0) {
+      console.log(`Found ${filteredData.length} cached items in ${storeName}`);
+      return filteredData as unknown as T;
+    }
+    
+    // If no cached data, throw an error
+    throw new Error(`No cached data available for ${storeName} while offline`);
+  } catch (error) {
+    console.error(`Error in offline fallback for ${storeName}:`, error);
+    // Return empty array or default value as appropriate
+    return ([] as unknown) as T;
+  }
+}
+
+/**
+ * Force load data from IndexedDB when offline
+ * This is a critical function that ensures data is loaded even when the app initially loads offline
+ */
+export async function forceLoadOfflineData() {
+  if (navigator.onLine) {
+    // We're online, so no need to force load
+    return;
+  }
+  
+  console.log('Offline mode detected - forcing load of cached data');
+  
+  try {
+    // Load all data from critical stores
+    const stores = Object.values(STORES);
+    const loadedData: Record<string, unknown[]> = {};
+    
+    // Open database once
+    const db = await openDatabase();
+    
+    // Load data from each store
+    for (const store of stores) {
+      try {
+        const tx = db.transaction(store, 'readonly');
+        const storeObj = tx.objectStore(store);
+        
+        // Get all data from store
+        const data = await new Promise<unknown[]>((resolve, reject) => {
+          const request = storeObj.getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        
+        // Store data in result object
+        loadedData[store] = data;
+        console.log(`Loaded ${data.length} items from ${store} for offline use`);
+      } catch (error) {
+        console.warn(`Failed to load ${store} data:`, error);
+      }
+    }
+    
+    // Return all loaded data
+    return loadedData;
+  } catch (error) {
+    console.error('Failed to force load offline data:', error);
+  }
 } 

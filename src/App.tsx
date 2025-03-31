@@ -312,6 +312,46 @@ export default function App() {
 
   const renderContent = () => {
     switch (activePage) {
+      case 'home':
+        return (
+          <div>
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                {getStatTitle()}
+              </h1>
+              
+              <TaskCategories 
+                selectedCategory={selectedCategory}
+                onSelect={handleCategorySelect}
+              />
+              
+              <div className="flex flex-wrap mt-6 gap-3">
+                {renderStatButton('all', ListTodo, 'All')}
+                {renderStatButton('overdue', AlertCircle, 'Due')}
+                {renderStatButton('in-progress', Clock, 'In Progress')}
+                {renderStatButton('completed', CheckCircle2, 'Completed')}
+              </div>
+            </div>
+            
+            {/* Use InstantTransition for the task list to prevent white flash */}
+            <InstantTransition>
+              <TaskList 
+                tasks={getFilteredTasks()}
+                onMarkComplete={handleMarkComplete}
+                onEdit={handleEditTask}
+                onDelete={handleDeleteTask}
+                loading={tasksLoading}
+                isEmpty={getFilteredTasks().length === 0}
+                emptyMessage={getEmptyMessage()}
+                showCourseLabels={true}
+                userMap={userMap}
+                onTaskClick={recordAction}
+                onRefresh={refreshTasks}
+                isOffline={isOffline}
+              />
+            </InstantTransition>
+          </div>
+        );
       case 'upcoming':
         return (
           <Suspense fallback={<LoadingScreen minimumLoadTime={300} />}>
