@@ -198,6 +198,32 @@ const root = createRoot(rootElement);
 // Track initial render time
 performance.mark('react-mount-start');
 
+// Handle app recovery from extended offline periods
+const url = new URL(window.location.href);
+const isRecoveryAttempt = url.searchParams.has('reload') || 
+                          url.searchParams.has('online') || 
+                          url.searchParams.has('fresh');
+
+if (isRecoveryAttempt) {
+  console.log('App recovery attempt detected');
+  
+  // Clear the offline start time
+  localStorage.removeItem('offline_start_time');
+  
+  // Force a clean reload if necessary
+  if (url.searchParams.has('fresh')) {
+    console.log('Performing clean app reload');
+    // Don't add this logic to the render path, add it as a side effect
+    setTimeout(() => {
+      // Clear the recovery params and reload once more for a clean state
+      url.searchParams.delete('fresh');
+      url.searchParams.delete('reload');
+      url.searchParams.delete('online');
+      window.history.replaceState({}, '', url.toString());
+    }, 1000);
+  }
+}
+
 // Render the app with minimal suspense delay and initialize loading state in DOM
 root.render(
   <StrictMode>

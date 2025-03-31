@@ -61,6 +61,21 @@ export async function registerServiceWorker() {
       // Set up update handler
       setupUpdateHandler(existingRegistration);
       
+      // Force client claim to ensure we're controlled
+      if (existingRegistration.active && !navigator.serviceWorker.controller) {
+        // Create a message channel to communicate with the service worker
+        const messageChannel = new MessageChannel();
+        messageChannel.port1.onmessage = (event) => {
+          if (event.data && event.data.type === 'CLAIMING_CLIENTS') {
+            console.log('Service worker is claiming clients');
+          }
+        };
+        
+        existingRegistration.active.postMessage({
+          type: 'CLAIM_CLIENTS'
+        }, [messageChannel.port2]);
+      }
+      
       return existingRegistration;
     }
     
@@ -75,13 +90,23 @@ export async function registerServiceWorker() {
     const registration = await Promise.race([
       swRegisterPromise,
       new Promise<null>((resolve) => {
-        // If registration takes more than 5 seconds, proceed without waiting
-        setTimeout(() => resolve(null), 5000);
+        // If registration takes more than 10 seconds, proceed without waiting
+        setTimeout(() => resolve(null), 10000);
       })
     ]) as ServiceWorkerRegistration | null;
     
     if (!registration) {
       console.warn('Service Worker registration timed out, app will continue without it');
+      // Try again in the background without blocking the app
+      setTimeout(() => {
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+          .then(delayedReg => {
+            serviceWorkerRegistration = delayedReg;
+            setupUpdateHandler(delayedReg);
+            console.log('Service Worker registered in background');
+          })
+          .catch(err => console.error('Background service worker registration failed:', err));
+      }, 5000);
       return null;
     }
     
@@ -90,6 +115,28 @@ export async function registerServiceWorker() {
     
     // Set up service worker update handling
     setupUpdateHandler(registration);
+    
+    // Wait for the service worker to be activated
+    if (registration.installing) {
+      console.log('Waiting for service worker to be activated...');
+      await new Promise<void>((resolve) => {
+        const worker = registration.installing;
+        if (!worker) {
+          resolve();
+          return;
+        }
+        
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'activated') {
+            console.log('Service worker activated');
+            resolve();
+          }
+        });
+        
+        // Add timeout to prevent blocking indefinitely
+        setTimeout(resolve, 5000);
+      });
+    }
     
     return registration;
   } catch (error) {
@@ -252,6 +299,7 @@ export function setupKeepAlive() {
 export function setupOfflineDetection() {
   // Track last known state to avoid duplicate notifications
   let wasOffline = !navigator.onLine;
+  let offlineTime = wasOffline ? Date.now() : 0;
   
   // Set initial offline status
   if (!navigator.onLine) {
@@ -268,8 +316,22 @@ export function setupOfflineDetection() {
       console.log('App is back online');
       document.body.classList.remove('offline-mode');
       
+      // Calculate how long we were offline
+      const offlineDuration = Date.now() - offlineTime;
+      console.log(`Device was offline for ${Math.round(offlineDuration/1000/60)} minutes`);
+      
       // Dispatch an event for the app to handle
-      window.dispatchEvent(new CustomEvent('app-online'));
+      window.dispatchEvent(new CustomEvent('app-online', {
+        detail: { offlineDuration }
+      }));
+      
+      // If we were offline for more than 30 minutes, reload the page
+      // This helps recover from stale service worker or cache issues
+      if (offlineDuration > 30 * 60 * 1000) {
+        console.log('Long offline period detected, refreshing app');
+        setTimeout(() => window.location.reload(), 1000);
+        return;
+      }
       
       // Attempt to sync any pending changes
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -279,6 +341,7 @@ export function setupOfflineDetection() {
       }
     }
     wasOffline = false;
+    offlineTime = 0;
   });
   
   // Setup offline event listener
@@ -286,6 +349,7 @@ export function setupOfflineDetection() {
     console.log('App is now offline');
     document.body.classList.add('offline-mode');
     wasOffline = true;
+    offlineTime = Date.now();
     
     // Dispatch offline event for app to handle
     window.dispatchEvent(new CustomEvent('app-offline'));
@@ -309,6 +373,43 @@ export function setupOfflineDetection() {
     }
   `;
   document.head.appendChild(style);
+  
+  // Add offline recovery logic
+  window.addEventListener('load', () => {
+    // Check if the service worker might be in a bad state
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        if (registrations.length === 0 && navigator.onLine) {
+          // No service worker registered but we're online - try to register
+          registerServiceWorker().catch(console.error);
+        }
+      });
+    }
+  });
+  
+  // Add periodic service worker health check
+  const healthCheckInterval = 15 * 60 * 1000; // 15 minutes
+  setInterval(() => {
+    if (navigator.onLine && 'serviceWorker' in navigator) {
+      // Check service worker health
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        if (registrations.length === 0) {
+          // No service worker registered - try to register
+          registerServiceWorker().catch(console.error);
+        } else {
+          // Send health check ping to any active service worker
+          const activeWorker = navigator.serviceWorker.controller;
+          if (activeWorker) {
+            activeWorker.postMessage({
+              type: 'KEEP_ALIVE',
+              timestamp: Date.now(),
+              reason: 'healthCheck'
+            });
+          }
+        }
+      });
+    }
+  }, healthCheckInterval);
 }
 
 // Helper function to convert VAPID key

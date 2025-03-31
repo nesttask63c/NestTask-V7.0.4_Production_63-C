@@ -1,5 +1,6 @@
 const CACHE_NAME = 'nesttask-v3';
 const OFFLINE_URL = '/offline.html';
+const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
 // Assets to cache on install
 const STATIC_ASSETS = [
@@ -57,7 +58,10 @@ function initBackgroundSync() {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      console.log('Caching app shell and static assets');
+      return cache.addAll(STATIC_ASSETS.map(url => {
+        return new Request(url, { cache: 'reload' });
+      }));
     })
   );
   self.skipWaiting();
@@ -193,27 +197,48 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
-    // Special handling for SPA routes - always serve index.html
+    // Improved app shell handling for navigation requests with robust offline fallback
     if (event.request.mode === 'navigate') {
-      const isSpaRoute = SPA_ROUTES.some(route => 
-        url.pathname === route || url.pathname.startsWith(`${route}/`)
+      event.respondWith(
+        (async () => {
+          try {
+            // Try network first for fresh content
+            const networkResponse = await fetch(event.request);
+            
+            // If online, update the cache with the fresh content
+            if (networkResponse.ok) {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(event.request, networkResponse.clone());
+              return networkResponse;
+            }
+          } catch (error) {
+            console.log('Fetch failed, falling back to cache', error);
+            // Network failed, try cache
+          }
+          
+          // Look for a cached response
+          const cachedResponse = await caches.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          
+          // Check for cached index.html for SPA routes
+          const isSpaRoute = SPA_ROUTES.some(route => 
+            url.pathname === route || url.pathname.startsWith(`${route}/`)
+          );
+          
+          if (isSpaRoute) {
+            const indexHtmlResponse = await caches.match('/index.html');
+            if (indexHtmlResponse) {
+              return indexHtmlResponse;
+            }
+          }
+          
+          // If all else fails, show the offline page
+          return caches.match(OFFLINE_URL);
+        })()
       );
-      
-      if (isSpaRoute) {
-        event.respondWith(
-          caches.match('/index.html')
-            .then(response => {
-              if (response) {
-                return response;
-              }
-              return fetch('/index.html');
-            })
-            .catch(() => {
-              return caches.match(OFFLINE_URL);
-            })
-        );
-        return;
-      }
+      return;
     }
 
     // Check for module scripts
@@ -236,28 +261,6 @@ self.addEventListener('fetch', (event) => {
             // Fallback to cache
             const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
             return cachedResponse || new Response('Module not available', { status: 404 });
-          })
-      );
-      return;
-    }
-
-    // Navigation requests (HTML pages) - network first
-    if (event.request.mode === 'navigate') {
-      event.respondWith(
-        fetch(event.request)
-          .then(response => {
-            // Cache the latest version
-            const responseClone = response.clone();
-            safeCachePut(CACHE_NAME, event.request, responseClone);
-            return response;
-          })
-          .catch(async () => {
-            // Offline fallback
-            const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-            if (cachedResponse) return cachedResponse;
-            
-            // If no cached version, show offline page
-            return safeCacheMatch(CACHE_NAME, OFFLINE_URL);
           })
       );
       return;
@@ -310,9 +313,12 @@ self.addEventListener('fetch', (event) => {
         })
     );
   } catch (error) {
-    console.error('Error in fetch handler:', error, event.request.url);
-    // Let the browser handle this request normally
-    return;
+    console.error('Error in fetch handler:', error);
+    
+    // Last resort offline fallback
+    if (event.request.mode === 'navigate') {
+      event.respondWith(caches.match(OFFLINE_URL));
+    }
   }
 });
 
@@ -472,63 +478,108 @@ async function safeCacheMatch(cacheName, request) {
 // Add a message handler for keep-alive pings
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'KEEP_ALIVE') {
-    console.log('Keep-alive ping received at', new Date(event.data.timestamp).toISOString());
-    
-    // Respond to the keep-alive to confirm service worker is active
-    if (event.source) {
-      event.source.postMessage({
-        type: 'KEEP_ALIVE_RESPONSE',
-        timestamp: Date.now()
-      });
-    }
-    
-    // Optional: refresh certain caches if needed
-    // This helps keep critical data fresh in long offline periods
-    if (event.data.reason === 'visibilitychange') {
-      console.log('Refreshing critical caches on visibility change');
-      
-      caches.open(CACHE_NAME).then(cache => {
-        // Refresh the main index.html on visibility change
-        fetch('/index.html')
-          .then(response => {
-            if (response.ok) {
-              cache.put('/index.html', response);
-            }
-          })
-          .catch(err => console.error('Failed to refresh index.html:', err));
-      });
-    }
-  } else if (event.data && event.data.type === 'SYNC_NOW') {
-    console.log('SYNC_NOW message received, attempting immediate sync');
-    
-    // Verify workbox and queue availability
-    if ('workbox' in self && taskQueue && routineQueue && courseTeacherQueue) {
-      // Try to perform sync for all queues
-      Promise.allSettled([
-        taskQueue.replayRequests(),
-        routineQueue.replayRequests(), 
-        courseTeacherQueue.replayRequests()
-      ]).then(results => {
-        console.log('Sync attempts completed:', results);
-        
-        // Notify all clients that sync was attempted
-        self.clients.matchAll().then(clients => {
-          clients.forEach(client => {
-            client.postMessage({
-              type: 'SYNC_NOW_COMPLETED',
-              results: results.map(r => r.status)
+    // When receiving keep-alive, check cache health
+    event.waitUntil(validateCacheHealth());
+  }
+  
+  if (event.data && event.data.type === 'SYNC_NOW') {
+    // Trigger sync immediately upon reconnection
+    event.waitUntil(
+      (async () => {
+        if ('sync' in self.registration) {
+          try {
+            await self.registration.sync.register('taskSync');
+            await self.registration.sync.register('routineSync');
+            await self.registration.sync.register('courseTeacherSync');
+            
+            // Notify clients that sync has been triggered
+            notifyClientsOfSync('all');
+          } catch (error) {
+            console.error('Error registering sync on reconnection:', error);
+          }
+        }
+      })()
+    );
+  }
+  
+  if (event.data && event.data.type === 'CLAIM_CLIENTS') {
+    console.log('Received request to claim clients');
+    event.waitUntil(
+      self.clients.claim()
+        .then(() => {
+          console.log('Clients claimed successfully');
+          // Respond to the client
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CLAIMING_CLIENTS',
+              success: true
             });
-          });
-        });
-      });
-    } else {
-      console.warn('Cannot perform immediate sync: workbox or queues not available');
-      if (event.source) {
-        event.source.postMessage({
-          type: 'SYNC_NOW_ERROR',
-          error: 'Background sync not available'
-        });
-      }
-    }
+          }
+        })
+        .catch(error => {
+          console.error('Error claiming clients:', error);
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CLAIMING_CLIENTS',
+              success: false,
+              error: error.message
+            });
+          }
+        })
+    );
   }
 });
+
+// Validate and fix cache health
+async function validateCacheHealth() {
+  try {
+    // Check if the offline page is cached
+    const offlineCache = await caches.match(OFFLINE_URL);
+    if (!offlineCache) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.add(OFFLINE_URL);
+      console.log('Restored missing offline page');
+    }
+    
+    // Check if app shell is cached
+    const indexCache = await caches.match('/index.html');
+    if (!indexCache) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.add('/index.html');
+      console.log('Restored missing index.html');
+    }
+    
+    // Check and refresh old cache entries
+    const cache = await caches.open(CACHE_NAME);
+    const requests = await cache.keys();
+    const now = Date.now();
+    
+    for (const request of requests) {
+      const response = await cache.match(request);
+      if (response) {
+        const headers = response.headers;
+        const dateHeader = headers.get('date');
+        
+        if (dateHeader) {
+          const cacheDate = new Date(dateHeader).getTime();
+          if (now - cacheDate > MAX_CACHE_AGE) {
+            // Try to refresh stale cache entry if online
+            try {
+              if (navigator.onLine) {
+                const freshResponse = await fetch(request, { cache: 'reload' });
+                if (freshResponse.ok) {
+                  await cache.put(request, freshResponse);
+                  console.log('Refreshed stale cache entry:', request.url);
+                }
+              }
+            } catch (error) {
+              console.log('Could not refresh stale cache entry:', error);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error validating cache health:', error);
+  }
+}

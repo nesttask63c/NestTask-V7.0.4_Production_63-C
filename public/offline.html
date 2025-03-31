@@ -48,14 +48,47 @@
       font-weight: 600;
       cursor: pointer;
       transition: background-color 0.2s;
+      margin-bottom: 15px;
     }
     .button:hover {
       background-color: #4338ca;
+    }
+    .button.secondary {
+      background-color: #e5e7eb;
+      color: #4b5563;
+    }
+    .button.secondary:hover {
+      background-color: #d1d5db;
     }
     .info {
       margin-top: 20px;
       font-size: 14px;
       color: #888;
+    }
+    .timer {
+      font-size: 14px;
+      color: #888;
+      margin-top: 10px;
+    }
+    .progress {
+      width: 100%;
+      height: 4px;
+      background-color: #e5e7eb;
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background-color: #4f46e5;
+      transition: width 1s linear;
+    }
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -65,17 +98,107 @@
     <h1>You're Offline</h1>
     <p>Don't worry! NestTask has saved your recent tasks and routines. You can still view your previously loaded content.</p>
     <p>Some features may be limited until your connection is restored.</p>
-    <button class="button" onclick="window.location.reload()">Try Again</button>
+    
+    <div class="buttons">
+      <button class="button" id="tryAgainBtn">Try Again</button>
+      <button class="button secondary" id="resetAppBtn">Reset App</button>
+    </div>
+    
+    <div id="autoRetryInfo" style="display: none;">
+      <div class="timer">Auto-retry in <span id="countdown">15</span> seconds</div>
+      <div class="progress">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+    
     <div class="info">
       <p>If you were previously logged in, you can still access your cached tasks and routines.</p>
+      <p id="offlineTime"></p>
     </div>
   </div>
 
   <script>
+    // Get the time we went offline from localStorage if available
+    const offlineStartTime = localStorage.getItem('offline_start_time');
+    const offlineTimeElem = document.getElementById('offlineTime');
+    
+    if (offlineStartTime) {
+      const offlineDuration = Math.floor((Date.now() - parseInt(offlineStartTime)) / 1000 / 60);
+      offlineTimeElem.textContent = `You've been offline for approximately ${offlineDuration} minutes.`;
+    }
+    
+    // Handle try again button
+    document.getElementById('tryAgainBtn').addEventListener('click', () => {
+      // Clear any service worker issues that might be preventing the app from loading
+      if ('serviceWorker' in navigator) {
+        // First try to reload with existing service worker
+        window.location.href = '/';
+      } else {
+        window.location.reload();
+      }
+    });
+    
+    // Handle reset app button (more aggressive recovery)
+    document.getElementById('resetAppBtn').addEventListener('click', async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          // Unregister all service workers
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            await registration.unregister();
+          }
+          
+          // Clear caches
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+          }
+          
+          alert('App reset complete. The app will now reload.');
+          window.location.href = '/?fresh=' + Date.now();
+        } catch (error) {
+          console.error('Error resetting app:', error);
+          alert('Failed to reset app: ' + error.message);
+        }
+      } else {
+        window.location.reload();
+      }
+    });
+    
+    // Auto-retry mechanism
+    let countdown = 15;
+    const countdownElem = document.getElementById('countdown');
+    const progressBar = document.getElementById('progressBar');
+    const autoRetryInfo = document.getElementById('autoRetryInfo');
+    
+    // Start auto-retry countdown after 5 seconds
+    setTimeout(() => {
+      autoRetryInfo.style.display = 'block';
+      progressBar.style.width = '0%';
+      
+      const timer = setInterval(() => {
+        countdown--;
+        countdownElem.textContent = countdown.toString();
+        progressBar.style.width = `${((15 - countdown) / 15) * 100}%`;
+        
+        if (countdown <= 0) {
+          clearInterval(timer);
+          // Try to recover the app by forcing a reload
+          window.location.href = '/?reload=' + Date.now();
+        }
+      }, 1000);
+    }, 5000);
+    
     // Check if we're back online
     window.addEventListener('online', () => {
-      window.location.reload();
+      // Add a timestamp to prevent cache issues
+      window.location.href = '/?online=' + Date.now();
     });
+    
+    // Store the time we went offline if not already set
+    if (!offlineStartTime) {
+      localStorage.setItem('offline_start_time', Date.now().toString());
+    }
   </script>
 </body>
 </html>
