@@ -139,7 +139,7 @@ export function usePredictivePreload(
       } else if (page === 'routine') {
         prefetchApiData(
           'routines',
-          (query) => query.select('*').eq('isActive', true).limit(1),
+          (query) => query.select('*').eq('is_active', true).limit(1),
           'active_routine',
           STORES.ROUTINES
         );

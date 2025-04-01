@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "clean-dev": "node -e \"if (require('fs').existsSync('node_modules/.vite')) require('fs').rmSync('node_modules/.vite', { recursive: true, force: true })\" && vite --force",
     "build": "tsc && vite build",
     "vercel-build": "node vercel-build.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

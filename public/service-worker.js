@@ -33,6 +33,47 @@ const RUNTIME_CACHE_PATTERNS = [
 // Create sync queues for different operations
 let taskQueue, routineQueue, courseTeacherQueue;
 
+// Store last activity timestamp to track service worker lifecycle
+let lastActivityTime = Date.now();
+
+// Update the activity timestamp for service worker
+function updateActivityTimestamp() {
+  lastActivityTime = Date.now();
+  // Store the timestamp in cache to persist across service worker restarts
+  try {
+    if (caches) {
+      caches.open('sw-metadata').then(cache => {
+        cache.put('lastActivityTime', new Response(JSON.stringify({ timestamp: lastActivityTime })));
+      });
+    }
+  } catch (e) {
+    console.error('Error storing activity timestamp:', e);
+  }
+}
+
+// Check if the service worker has been inactive for too long
+async function checkServiceWorkerInactivity() {
+  try {
+    if (caches) {
+      const cache = await caches.open('sw-metadata');
+      const response = await cache.match('lastActivityTime');
+      
+      if (response) {
+        const data = await response.json();
+        const inactiveTime = Date.now() - data.timestamp;
+        
+        // If inactive for more than 45 minutes, update to keep alive
+        if (inactiveTime > 45 * 60 * 1000) {
+          console.log('Service worker has been inactive for too long. Refreshing timestamp.');
+          updateActivityTimestamp();
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error checking inactivity:', e);
+  }
+}
+
 // Initialize background sync if supported
 function initBackgroundSync() {
   if ('sync' in self.registration) {
@@ -70,6 +111,9 @@ self.addEventListener('install', (event) => {
       console.error('Error initializing background sync:', error);
     }
   }
+  
+  // Initialize activity timestamp
+  updateActivityTimestamp();
 });
 
 // Activate event - clean up old caches
@@ -78,11 +122,15 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .filter((cacheName) => cacheName !== CACHE_NAME && cacheName !== 'sw-metadata')
           .map((cacheName) => caches.delete(cacheName))
       );
     })
   );
+  
+  // Set up periodic activity check
+  setInterval(checkServiceWorkerInactivity, 15 * 60 * 1000); // Check every 15 minutes
+  
   self.clients.claim();
 });
 
@@ -128,6 +176,9 @@ const SPA_ROUTES = [
 
 // Fetch event - stale-while-revalidate strategy for assets, network-first for API
 self.addEventListener('fetch', (event) => {
+  // Update activity timestamp on fetch events
+  updateActivityTimestamp();
+  
   // Handle non-GET requests with background sync for offline support
   if (event.request.method !== 'GET') {
     // Process API requests for background sync when offline
@@ -252,67 +303,50 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(async () => {
-            // Offline fallback
+            // Try to get from cache
             const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-            if (cachedResponse) return cachedResponse;
             
-            // If no cached version, show offline page
-            return safeCacheMatch(CACHE_NAME, OFFLINE_URL);
+            // If not in cache, serve offline page
+            if (!cachedResponse) {
+              const offlineResponse = await safeCacheMatch(CACHE_NAME, new Request(OFFLINE_URL));
+              return offlineResponse || new Response('Offline page not available', {
+                status: 503,
+                headers: { 'Content-Type': 'text/html' }
+              });
+            }
+            
+            return cachedResponse;
           })
       );
       return;
     }
 
-    // For runtime-cacheable assets (JS, CSS, images) - stale-while-revalidate
+    // For assets that should be cached
     if (shouldCacheAtRuntime(event.request.url)) {
       event.respondWith(
-        (async () => {
-          // Try to get from cache first
-          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-          
-          // Fetch from network in background
-          const fetchPromise = fetch(event.request)
-            .then(networkResponse => {
-              // Cache the new version
-              safeCachePut(CACHE_NAME, event.request, networkResponse.clone());
-              return networkResponse;
-            })
-            .catch(() => {
-              // If fetch fails, return cached or null
-              return cachedResponse || null;
-            });
-            
-          // Return cached response immediately, or wait for network
-          return cachedResponse || fetchPromise;
-        })()
+        caches.open(CACHE_NAME).then((cache) => {
+          return cache.match(event.request).then((cachedResponse) => {
+            const fetchPromise = fetch(event.request)
+              .then((networkResponse) => {
+                if (networkResponse.ok) {
+                  cache.put(event.request, networkResponse.clone());
+                }
+                return networkResponse;
+              })
+              .catch(() => {
+                console.log(`Serving cached version of ${event.request.url}`);
+                return new Response('Content not available offline', { status: 404 });
+              });
+
+            // Return the cached response if we have it, otherwise wait for the network response
+            return cachedResponse || fetchPromise;
+          });
+        })
       );
       return;
     }
-
-    // For all other requests - network first with cache fallback
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          // Cache successful responses that match patterns
-          if (response.ok && shouldCacheAtRuntime(event.request.url)) {
-            const responseClone = response.clone();
-            safeCachePut(CACHE_NAME, event.request, responseClone);
-          }
-          return response;
-        })
-        .catch(async () => {
-          // Try to get from cache
-          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
-          if (cachedResponse) return cachedResponse;
-
-          // Return error response
-          return new Response('Network error', { status: 408 });
-        })
-    );
   } catch (error) {
-    console.error('Error in fetch handler:', error, event.request.url);
-    // Let the browser handle this request normally
-    return;
+    console.error('Error in fetch handler:', error);
   }
 });
 
@@ -443,18 +477,15 @@ self.addEventListener('notificationclick', (event) => {
 // Helper function to safely put items in cache
 async function safeCachePut(cacheName, request, response) {
   try {
-    // Clone the response to avoid consuming it
-    const responseToCache = response.clone();
-    
-    // Only cache valid responses
-    if (!responseToCache || responseToCache.status !== 200) {
+    if (!response || !response.body) {
+      console.warn('Cannot cache invalid response for', request.url);
       return;
     }
     
     const cache = await caches.open(cacheName);
-    await cache.put(request, responseToCache);
+    await cache.put(request, response);
   } catch (error) {
-    console.error('Error caching response:', error);
+    console.error('Cache put error for', request.url, error);
   }
 }
 
@@ -462,9 +493,9 @@ async function safeCachePut(cacheName, request, response) {
 async function safeCacheMatch(cacheName, request) {
   try {
     const cache = await caches.open(cacheName);
-    return await cache.match(request);
+    return cache.match(request);
   } catch (error) {
-    console.error('Error matching cache:', error);
+    console.error('Cache match error for', request.url, error);
     return null;
   }
 }
@@ -474,6 +505,9 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'KEEP_ALIVE') {
     console.log('Keep-alive ping received at', new Date(event.data.timestamp).toISOString());
     
+    // Update activity timestamp
+    updateActivityTimestamp();
+    
     // Respond to the keep-alive to confirm service worker is active
     if (event.source) {
       event.source.postMessage({
@@ -481,54 +515,89 @@ self.addEventListener('message', (event) => {
         timestamp: Date.now()
       });
     }
-    
-    // Optional: refresh certain caches if needed
-    // This helps keep critical data fresh in long offline periods
-    if (event.data.reason === 'visibilitychange') {
-      console.log('Refreshing critical caches on visibility change');
-      
-      caches.open(CACHE_NAME).then(cache => {
-        // Refresh the main index.html on visibility change
-        fetch('/index.html')
-          .then(response => {
-            if (response.ok) {
-              cache.put('/index.html', response);
-            }
-          })
-          .catch(err => console.error('Failed to refresh index.html:', err));
-      });
-    }
   } else if (event.data && event.data.type === 'SYNC_NOW') {
     console.log('SYNC_NOW message received, attempting immediate sync');
     
-    // Verify workbox and queue availability
-    if ('workbox' in self && taskQueue && routineQueue && courseTeacherQueue) {
-      // Try to perform sync for all queues
-      Promise.allSettled([
-        taskQueue.replayRequests(),
-        routineQueue.replayRequests(), 
-        courseTeacherQueue.replayRequests()
-      ]).then(results => {
-        console.log('Sync attempts completed:', results);
+    // Update activity timestamp
+    updateActivityTimestamp();
+    
+    // Try to perform sync for all queues
+    if ('workbox' in self) {
+      try {
+        taskQueue.replayRequests();
+        routineQueue.replayRequests();
+        courseTeacherQueue.replayRequests();
         
-        // Notify all clients that sync was attempted
-        self.clients.matchAll().then(clients => {
-          clients.forEach(client => {
-            client.postMessage({
-              type: 'SYNC_NOW_COMPLETED',
-              results: results.map(r => r.status)
-            });
+        // Notify client that sync was attempted
+        if (event.source) {
+          event.source.postMessage({
+            type: 'SYNC_NOW_COMPLETED',
+            success: true
           });
-        });
-      });
-    } else {
-      console.warn('Cannot perform immediate sync: workbox or queues not available');
-      if (event.source) {
-        event.source.postMessage({
-          type: 'SYNC_NOW_ERROR',
-          error: 'Background sync not available'
-        });
+        }
+      } catch (error) {
+        console.error('Error replaying queued requests:', error);
+        
+        if (event.source) {
+          event.source.postMessage({
+            type: 'SYNC_NOW_COMPLETED',
+            success: false,
+            error: error.message
+          });
+        }
       }
     }
+  } else if (event.data && event.data.type === 'HEALTH_CHECK') {
+    console.log('Health check request received');
+    
+    // Update activity timestamp
+    updateActivityTimestamp();
+    
+    // Respond to confirm the service worker is healthy
+    if (event.source) {
+      event.source.postMessage({
+        type: 'HEALTH_CHECK_RESPONSE',
+        timestamp: Date.now(),
+        status: 'healthy'
+      });
+    }
+  } else if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('Skip waiting requested, activating service worker immediately');
+    self.skipWaiting();
+  } else if (event.data && event.data.type === 'CLAIM_CLIENTS') {
+    console.log('Claim clients requested, claiming all clients');
+    self.clients.claim();
+    
+    // Notify clients that they've been claimed
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'CLAIMED_BY_SERVICE_WORKER',
+          timestamp: Date.now()
+        });
+      });
+    });
   }
 });
+
+// Self-healing: Attempt to recover from critical errors
+self.addEventListener('error', (event) => {
+  console.error('Service Worker error:', event.error);
+  
+  // Log the error and update activity timestamp to keep the worker alive
+  updateActivityTimestamp();
+});
+
+// Keep track of unhandled promise rejections
+self.addEventListener('unhandledrejection', (event) => {
+  console.error('Service Worker unhandled rejection:', event.reason);
+  
+  // Log the error and update activity timestamp to keep the worker alive
+  updateActivityTimestamp();
+});
+
+// Set up a periodic ping to keep the service worker alive
+setInterval(() => {
+  updateActivityTimestamp();
+  console.log('Self-ping to keep service worker alive at', new Date().toISOString());
+}, 20 * 60 * 1000); // Ping every 20 minutes

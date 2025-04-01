@@ -3,10 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 // Import CSS (Vite handles this correctly)
 import './index.css';
-import { LoadingScreen } from './components/LoadingScreen';
-import { initPWA } from './utils/pwa';
-import { prefetchResources, prefetchAsset, prefetchApiData } from './utils/prefetch';
-import { STORES } from './utils/offlineStorage';
+import { LoadingScreen } from '@/components/LoadingScreen';
+import { initPWA } from '@/utils/pwa';
+import { prefetchResources, prefetchAsset, prefetchApiData } from '@/utils/prefetch';
+// Use normal import without extension, the path alias will handle it correctly
+import { STORES } from '@/utils/offlineStorage';
 
 // Performance optimizations initialization
 const startTime = performance.now();

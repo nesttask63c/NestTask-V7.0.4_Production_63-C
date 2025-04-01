@@ -250,6 +250,137 @@ export async function clearIndexedDBStore(storeName: string): Promise<void> {
 }
 
 /**
+ * Cleanup stale offline cache data to prevent corruption issues
+ * This removes data that might be causing the app to fail when offline for long periods
+ */
+export async function cleanupStaleCacheData(): Promise<void> {
+  try {
+    console.log('Starting cleanup of stale cache data');
+    
+    // Check if cache cleanup has been performed recently
+    const lastCleanup = localStorage.getItem('sw_last_cache_cleanup');
+    const now = Date.now();
+    
+    if (lastCleanup) {
+      const lastCleanupTime = parseInt(lastCleanup);
+      // Only perform cleanup once per day
+      if (now - lastCleanupTime < 24 * 60 * 60 * 1000) {
+        console.log('Skipping cache cleanup, already performed in the last 24 hours');
+        return;
+      }
+    }
+    
+    // 1. Clear any items in IndexedDB older than 7 days
+    const db = await openDatabase();
+    const stores = [...Object.values(STORES)];
+    const cutoffTime = now - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+    
+    // Process each store to remove stale data
+    await Promise.all(stores.map(storeName => {
+      return new Promise<void>((resolve, reject) => {
+        try {
+          const transaction = db.transaction(storeName, 'readwrite');
+          const store = transaction.objectStore(storeName);
+          const request = store.openCursor();
+          let staleCount = 0;
+          
+          request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result;
+            if (cursor) {
+              const item = cursor.value;
+              
+              // Check if the item has a timestamp and is older than cutoff
+              if (item.updated_at && new Date(item.updated_at).getTime() < cutoffTime) {
+                cursor.delete();
+                staleCount++;
+              } else if (item.createdAt && new Date(item.createdAt).getTime() < cutoffTime) {
+                cursor.delete();
+                staleCount++;
+              } else if (item.timestamp && item.timestamp < cutoffTime) {
+                cursor.delete();
+                staleCount++;
+              }
+              
+              cursor.continue();
+            } else {
+              if (staleCount > 0) {
+                console.log(`Removed ${staleCount} stale items from ${storeName}`);
+              }
+            }
+          };
+          
+          transaction.oncomplete = () => {
+            resolve();
+          };
+          
+          transaction.onerror = (event) => {
+            console.error(`Error cleaning up stale data in ${storeName}:`, (event.target as IDBTransaction).error);
+            resolve(); // Don't reject to allow other stores to be processed
+          };
+        } catch (error) {
+          console.error(`Error in store cleanup for ${storeName}:`, error);
+          resolve(); // Don't reject to allow other stores to be processed
+        }
+      });
+    }));
+    
+    // 2. Clear expired cache entries
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      
+      await Promise.all(cacheNames.map(async (cacheName) => {
+        try {
+          // Skip the metadata cache
+          if (cacheName === 'sw-metadata') {
+            return;
+          }
+          
+          const cache = await caches.open(cacheName);
+          const requests = await cache.keys();
+          let expiredCount = 0;
+          
+          // For each cached request, check if it's stale
+          await Promise.all(requests.map(async (request) => {
+            try {
+              const response = await cache.match(request);
+              if (!response) return;
+              
+              // Check if we can extract date information
+              const dateHeader = response.headers.get('date');
+              if (dateHeader) {
+                const responseDate = new Date(dateHeader).getTime();
+                
+                // If older than 7 days, remove it
+                if (now - responseDate > 7 * 24 * 60 * 60 * 1000) {
+                  await cache.delete(request);
+                  expiredCount++;
+                }
+              }
+            } catch (error) {
+              console.error(`Error processing cached request ${request.url}:`, error);
+            }
+          }));
+          
+          if (expiredCount > 0) {
+            console.log(`Removed ${expiredCount} expired entries from cache ${cacheName}`);
+          }
+        } catch (error) {
+          console.error(`Error cleaning up cache ${cacheName}:`, error);
+        }
+      }));
+    }
+    
+    // 3. Record that we performed the cleanup
+    localStorage.setItem('sw_last_cache_cleanup', now.toString());
+    console.log('Completed stale cache data cleanup');
+    
+    return;
+  } catch (error) {
+    console.error('Error during cache cleanup:', error);
+  }
+}
+
+/**
  * Clear all data for a specific user from a store in IndexedDB
  * @param storeName The name of the store to clear
  * @param userId The ID of the user whose data should be cleared

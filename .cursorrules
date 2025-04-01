@@ -114,6 +114,16 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 - Use error boundaries in UI components to prevent entire application crashes from localized errors
 - Admin dashboard doesn't need caching or saving to IndexedDB - fetch fresh data each time to ensure admins always see the latest information
 
+## PWA Development
+
+- When using PWA features with Vite and TypeScript, use proper path aliases (@/utils/...) instead of relative imports to avoid development server issues
+- Implement activity timestamps in service workers to track lifespan and prevent termination
+- Add periodic cache cleanup to prevent stale data accumulation during extended offline periods
+- Implement a robust keep-alive mechanism with backup strategies for service worker reliability
+- Configure proper TypeScript settings for module resolution in projects with multiple tsconfig files
+- Add health checks for service workers when returning from extended offline periods
+- Use a metadata cache to store service worker state that persists across restarts
+
 # Scratchpad
 
 Task: Enhance the Teacher Management functionality to make it more professional
@@ -167,5 +177,26 @@ Key improvements completed:
 - Improved error handling and user feedback during all CRUD operations
 
 The Teacher Management system now offers administrators a professional, efficient interface for managing teacher data with powerful data analysis capabilities and export options.
+
+Task completed ✅
+
+## Fixed PWA Offline Support Issue
+
+Task: Fix the issue where the PWA interface doesn't load properly after being offline for more than an hour.
+
+[X] Identified and fixed the issue with offlineStorage.js import in main.tsx
+[X] Added proper path aliases in vite.config.ts for better module resolution
+[X] Updated TypeScript configuration for better module handling
+[X] Enhanced service worker with activity timestamps and keep-alive mechanisms
+[X] Added cleanup mechanisms for stale cache data
+[X] Implemented self-healing for service workers during extended offline periods
+[X] Fixed build configuration for better production reliability
+
+Key changes:
+1. Fixed import issue in main.tsx by using proper path aliases
+2. Added enhanced keep-alive mechanism in the service worker
+3. Implemented cache cleanup for stale data
+4. Added service worker self-healing capabilities
+5. Updated TypeScript configuration for proper module resolution
 
 Task completed ✅

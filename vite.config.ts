@@ -3,12 +3,21 @@ import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import compression from 'vite-plugin-compression';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 // Define algorithm type to avoid type errors
 type CompressionAlgorithm = 'gzip' | 'brotliCompress' | 'deflate' | 'deflateRaw';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  resolve: {
+    // Add aliases for better import paths
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+    // Force consistent extensions and improve module resolution
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
+  },
   plugins: [
     react(),
     VitePWA({
