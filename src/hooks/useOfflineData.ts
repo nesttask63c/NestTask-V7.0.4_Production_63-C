@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useOfflineStatus } from './useOfflineStatus';
-import { saveToIndexedDB, getAllFromIndexedDB, STORES, withOfflineFallback } from '../utils/offlineStorage';
+import { saveToIndexedDB, getAllFromIndexedDB, STORES } from '../utils/offlineStorage';
 
 /**
  * Custom hook for managing offline data access and synchronization
@@ -19,47 +19,50 @@ export function useOfflineData<T>(
   const isOffline = useOfflineStatus();
 
   // Fetch data based on online/offline status
-  const fetchData = useCallback(async (forceFresh = false) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Use our withOfflineFallback utility to handle offline gracefully
-      const result = await withOfflineFallback(
-        async () => {
-          if (isOffline && !forceFresh) {
-            throw new Error('Offline mode - using cached data');
-          }
-          return await fetcher();
-        },
-        storeKey
-      );
-      
-      setData(result);
-    } catch (err) {
-      console.error(`Error fetching ${storeKey} data:`, err);
-      setError(err as Error);
-      
-      // Even if withOfflineFallback fails, try one more time to get cached data
-      try {
-        const cachedData = await getAllFromIndexedDB(storeKey);
-        if (cachedData && cachedData.length > 0) {
-          console.log(`Last resort: Using cached ${storeKey} data after all failures`);
-          setData(cachedData as unknown as T);
-          // Don't clear the error, but at least show some data
-        }
-      } catch (cacheErr) {
-        console.error(`Critical error: Failed to get any ${storeKey} data:`, cacheErr);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [storeKey, isOffline, fetcher]);
-
-  // Initial load
   useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        if (isOffline) {
+          // When offline, get data from IndexedDB
+          console.log(`Offline: Fetching ${storeKey} from local storage`);
+          const offlineData = await getAllFromIndexedDB(storeKey);
+          setData(offlineData as unknown as T);
+        } else {
+          // When online, get data from API
+          console.log(`Online: Fetching ${storeKey} from API`);
+          const freshData = await fetcher();
+          setData(freshData);
+
+          // Store the fetched data in IndexedDB for offline use
+          await saveToIndexedDB(storeKey, freshData);
+        }
+      } catch (err) {
+        console.error(`Error fetching ${storeKey} data:`, err);
+        setError(err as Error);
+        
+        // If there's an error fetching data online, try to use cached data
+        if (!isOffline) {
+          try {
+            const cachedData = await getAllFromIndexedDB(storeKey);
+            if (cachedData && cachedData.length > 0) {
+              console.log(`Using cached ${storeKey} data due to online fetch error`);
+              setData(cachedData as unknown as T);
+              setError(null);
+            }
+          } catch (cacheErr) {
+            console.error(`Error fetching cached ${storeKey} data:`, cacheErr);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchData();
-  }, [fetchData]);
+  }, [storeKey, isOffline, fetcher]);
 
   // Save online data to IndexedDB whenever it changes
   useEffect(() => {
@@ -77,12 +80,7 @@ export function useOfflineData<T>(
     saveOnlineData();
   }, [storeKey, onlineData, isOffline]);
 
-  // Add refresh function to explicitly refresh data
-  const refreshData = useCallback(async () => {
-    return fetchData(true);
-  }, [fetchData]);
-
-  return { data, loading, error, isOffline, refreshData };
+  return { data, loading, error, isOffline };
 }
 
 /**
@@ -119,28 +117,4 @@ export function useOfflineUserData<T>(
   fetcher: () => Promise<T>,
 ) {
   return useOfflineData(STORES.USER_DATA, onlineData, fetcher);
-}
-
-/**
- * Hook for accessing courses offline
- * @param onlineData The courses from the online source
- * @param fetcher Function to fetch courses when online
- */
-export function useOfflineCourses<T>(
-  onlineData: T | null | undefined,
-  fetcher: () => Promise<T>,
-) {
-  return useOfflineData(STORES.COURSES, onlineData, fetcher);
-}
-
-/**
- * Hook for accessing teachers offline
- * @param onlineData The teachers from the online source
- * @param fetcher Function to fetch teachers when online
- */
-export function useOfflineTeachers<T>(
-  onlineData: T | null | undefined,
-  fetcher: () => Promise<T>,
-) {
-  return useOfflineData(STORES.TEACHERS, onlineData, fetcher);
 } 

@@ -1,5 +1,3 @@
-import { STORES } from './offlineStorage';
-
 // Check if the app can be installed
 export function checkInstallability() {
   if ('BeforeInstallPromptEvent' in window) {
@@ -63,59 +61,35 @@ export async function registerServiceWorker() {
       // Set up update handler
       setupUpdateHandler(existingRegistration);
       
-      // Force client claim to ensure we're controlled
-      if (existingRegistration.active && !navigator.serviceWorker.controller) {
-        // Create a message channel to communicate with the service worker
-        const messageChannel = new MessageChannel();
-        messageChannel.port1.onmessage = (event) => {
-          if (event.data && event.data.type === 'CLAIMING_CLIENTS') {
-            console.log('Service worker is claiming clients');
-          }
-        };
-        
-        existingRegistration.active.postMessage({
-          type: 'CLAIM_CLIENTS'
-        }, [messageChannel.port2]);
-      }
-      
       return existingRegistration;
     }
     
     // Register new service worker with controlled timing
-    console.log('Registering new service worker...');
-    const registration = await navigator.serviceWorker.register('/service-worker.js', {
+    const swRegisterPromise = navigator.serviceWorker.register('/service-worker.js', {
       scope: '/',
       // Update only when user is idle to minimize disruption
       updateViaCache: 'none',
     });
+    
+    // Apply timeout to service worker registration
+    const registration = await Promise.race([
+      swRegisterPromise,
+      new Promise<null>((resolve) => {
+        // If registration takes more than 5 seconds, proceed without waiting
+        setTimeout(() => resolve(null), 5000);
+      })
+    ]) as ServiceWorkerRegistration | null;
+    
+    if (!registration) {
+      console.warn('Service Worker registration timed out, app will continue without it');
+      return null;
+    }
     
     serviceWorkerRegistration = registration;
     console.log('Service Worker registered with scope:', registration.scope);
     
     // Set up service worker update handling
     setupUpdateHandler(registration);
-    
-    // Wait for the service worker to be activated
-    if (registration.installing) {
-      console.log('Waiting for service worker to be activated...');
-      await new Promise<void>((resolve) => {
-        const worker = registration.installing;
-        if (!worker) {
-          resolve();
-          return;
-        }
-        
-        worker.addEventListener('statechange', () => {
-          if (worker.state === 'activated') {
-            console.log('Service worker activated');
-            resolve();
-          }
-        });
-        
-        // Add timeout to prevent blocking indefinitely
-        setTimeout(resolve, 5000);
-      });
-    }
     
     return registration;
   } catch (error) {
@@ -199,8 +173,7 @@ export async function initPWA() {
     Promise.resolve().then(setupNativePullToRefresh),
     Promise.resolve().then(disableZoom),
     Promise.resolve().then(setupKeepAlive),
-    Promise.resolve().then(setupOfflineDetection),
-    Promise.resolve().then(ensureOfflineData)
+    Promise.resolve().then(setupOfflineDetection)
   ]);
   
   // Log any errors but don't block the app
@@ -279,7 +252,6 @@ export function setupKeepAlive() {
 export function setupOfflineDetection() {
   // Track last known state to avoid duplicate notifications
   let wasOffline = !navigator.onLine;
-  let offlineTime = wasOffline ? Date.now() : 0;
   
   // Set initial offline status
   if (!navigator.onLine) {
@@ -296,21 +268,8 @@ export function setupOfflineDetection() {
       console.log('App is back online');
       document.body.classList.remove('offline-mode');
       
-      // Calculate how long we were offline
-      const offlineDuration = Date.now() - offlineTime;
-      console.log(`Device was offline for ${Math.round(offlineDuration/1000/60)} minutes`);
-      
       // Dispatch an event for the app to handle
-      window.dispatchEvent(new CustomEvent('app-online', {
-        detail: { offlineDuration }
-      }));
-      
-      // Only reload for very long offline periods (2+ hours)
-      if (offlineDuration > 2 * 60 * 60 * 1000) {
-        console.log('Long offline period detected, refreshing app');
-        setTimeout(() => window.location.reload(), 1000);
-        return;
-      }
+      window.dispatchEvent(new CustomEvent('app-online'));
       
       // Attempt to sync any pending changes
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -320,7 +279,6 @@ export function setupOfflineDetection() {
       }
     }
     wasOffline = false;
-    offlineTime = 0;
   });
   
   // Setup offline event listener
@@ -328,7 +286,6 @@ export function setupOfflineDetection() {
     console.log('App is now offline');
     document.body.classList.add('offline-mode');
     wasOffline = true;
-    offlineTime = Date.now();
     
     // Dispatch offline event for app to handle
     window.dispatchEvent(new CustomEvent('app-offline'));
@@ -352,140 +309,6 @@ export function setupOfflineDetection() {
     }
   `;
   document.head.appendChild(style);
-  
-  // Add offline recovery logic
-  window.addEventListener('load', () => {
-    // Check if the service worker might be in a bad state
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        if (registrations.length === 0 && navigator.onLine) {
-          // No service worker registered but we're online - try to register
-          registerServiceWorker().catch(console.error);
-        }
-      });
-    }
-  });
-  
-  // Add periodic service worker health check
-  const healthCheckInterval = 15 * 60 * 1000; // 15 minutes
-  setInterval(() => {
-    if (navigator.onLine && 'serviceWorker' in navigator) {
-      // Check service worker health
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        if (registrations.length === 0) {
-          // No service worker registered - try to register
-          registerServiceWorker().catch(console.error);
-        } else {
-          // Send health check ping to any active service worker
-          const activeWorker = navigator.serviceWorker.controller;
-          if (activeWorker) {
-            activeWorker.postMessage({
-              type: 'KEEP_ALIVE',
-              timestamp: Date.now(),
-              reason: 'healthCheck'
-            });
-          }
-        }
-      });
-    }
-  }, healthCheckInterval);
-}
-
-// Ensure critical data is available offline
-async function ensureOfflineData() {
-  // Only run if we're online and IndexedDB is available
-  if (!navigator.onLine || !('indexedDB' in window)) return;
-  
-  try {
-    // Check if we have cached data for critical stores
-    const { openDatabase } = await import('./offlineStorage');
-    
-    // Get existing cached data count for critical stores
-    const stores = Object.values(STORES);
-    let needsCaching = false;
-    
-    // Check each critical store
-    for (const store of stores) {
-      try {
-        const db = await openDatabase();
-        const tx = db.transaction(store, 'readonly');
-        const countRequest = tx.objectStore(store).count();
-        
-        // Wait for the count operation to complete
-        const count = await new Promise<number>((resolve, reject) => {
-          countRequest.onsuccess = () => resolve(countRequest.result);
-          countRequest.onerror = () => reject(countRequest.error);
-        });
-        
-        if (count === 0) {
-          needsCaching = true;
-          console.log(`No cached data found for ${store}, will fetch data`);
-          break;
-        }
-      } catch (error) {
-        console.warn(`Error checking ${store} store:`, error);
-        needsCaching = true;
-      }
-    }
-    
-    // If any critical store needs data, trigger prefetching
-    if (needsCaching) {
-      const { prefetchResources, prefetchApiDataWithLoader } = await import('./prefetch');
-      
-      // Define critical data to prefetch
-      const criticalData = [
-        { 
-          type: 'api' as const, 
-          key: 'tasks', 
-          loader: {
-            tableName: 'tasks',
-            queryFn: (query: any) => query.select('*').order('due_date', { ascending: true }).limit(50),
-            storeName: STORES.TASKS
-          },
-          options: { priority: 'high' as const, forceCache: true }
-        },
-        { 
-          type: 'api' as const, 
-          key: 'routines', 
-          loader: {
-            tableName: 'routines',
-            queryFn: (query: any) => query.select('*'),
-            storeName: STORES.ROUTINES
-          },
-          options: { priority: 'high' as const, forceCache: true }
-        },
-        { 
-          type: 'api' as const, 
-          key: 'courses', 
-          loader: {
-            tableName: 'courses',
-            queryFn: (query: any) => query.select('*'),
-            storeName: STORES.COURSES
-          },
-          options: { priority: 'medium' as const, forceCache: true }
-        },
-        { 
-          type: 'api' as const, 
-          key: 'teachers', 
-          loader: {
-            tableName: 'teachers',
-            queryFn: (query: any) => query.select('*'),
-            storeName: STORES.TEACHERS
-          },
-          options: { priority: 'medium' as const, forceCache: true }
-        }
-      ];
-      
-      // Prefetch and cache critical data
-      console.log('Prefetching critical data for offline use...');
-      await prefetchResources(criticalData);
-      console.log('Critical data cached for offline use');
-    } else {
-      console.log('All critical stores have cached data for offline use');
-    }
-  } catch (error) {
-    console.error('Error ensuring offline data:', error);
-  }
 }
 
 // Helper function to convert VAPID key

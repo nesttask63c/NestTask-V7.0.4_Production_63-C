@@ -24,8 +24,9 @@ const App = lazy(() => import('./App').then(module => {
 
 // Initialize PWA functionality in parallel but don't block initial render
 const pwaPromise = Promise.resolve().then(() => {
-  // Register service worker immediately instead of delaying
-  initPWA().catch(err => console.error('PWA initialization error:', err));
+  setTimeout(() => {
+    initPWA().catch(err => console.error('PWA initialization error:', err));
+  }, 1000);
 });
 
 // Enhanced prefetch for resources with priority marking
@@ -170,29 +171,6 @@ Promise.resolve()
     // First tackle the connection optimizations
     establishConnectionOptimizations();
     
-    // Check if we're offline
-    if (!navigator.onLine) {
-      console.log('Starting app in offline mode - prioritizing cached data');
-      
-      // Force load offline data from IndexedDB
-      import('./utils/offlineStorage').then(({ forceLoadOfflineData }) => {
-        forceLoadOfflineData().then(data => {
-          if (data) {
-            console.log('Successfully pre-loaded offline data:',
-              Object.entries(data).map(([key, items]) => 
-                `${key}: ${Array.isArray(items) ? items.length : 0} items`
-              ).join(', ')
-            );
-          } else {
-            console.warn('No offline data available or failed to load');
-          }
-        });
-      });
-      
-      // Skip network operations when starting offline
-      return pwaPromise;
-    }
-    
     // Then start prefetching critical resources
     prefetchCriticalResources();
     
@@ -219,34 +197,6 @@ const root = createRoot(rootElement);
 
 // Track initial render time
 performance.mark('react-mount-start');
-
-// Handle app recovery from extended offline periods
-const url = new URL(window.location.href);
-const isRecoveryAttempt = url.searchParams.has('reload') || 
-                          url.searchParams.has('online') || 
-                          url.searchParams.has('fresh');
-
-if (isRecoveryAttempt) {
-  console.log('App recovery attempt detected');
-  
-  // Clear the offline start time
-  localStorage.removeItem('offline_start_time');
-  
-  // Force a clean reload if necessary
-  if (url.searchParams.has('fresh')) {
-    console.log('Performing clean app reload');
-    // Immediately clear the URL params to prevent refresh loops
-    url.searchParams.delete('fresh');
-    url.searchParams.delete('reload');
-    url.searchParams.delete('online');
-    window.history.replaceState({}, '', url.toString());
-  } else {
-    // For regular recovery attempts, just clear the params
-    url.searchParams.delete('reload');
-    url.searchParams.delete('online');
-    window.history.replaceState({}, '', url.toString());
-  }
-}
 
 // Render the app with minimal suspense delay and initialize loading state in DOM
 root.render(

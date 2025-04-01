@@ -7,197 +7,185 @@
   <link rel="icon" type="image/svg+xml" href="/icons/favicon.ico" />
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-      background-color: #f5f5f5;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
       color: #333;
+      margin: 0;
+      padding: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      margin: 0;
-      padding: 20px;
+      min-height: 100vh;
       text-align: center;
     }
     .container {
-      max-width: 500px;
+      max-width: 90%;
+      width: 600px;
+      padding: 2rem;
       background-color: white;
-      border-radius: 12px;
-      padding: 30px;
+      border-radius: 10px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
+    .logo {
+      width: 100px;
+      height: auto;
+      margin-bottom: 1rem;
+    }
     h1 {
-      color: #4f46e5;
-      margin-bottom: 10px;
+      color: #3949ab;
+      margin-bottom: 1rem;
     }
     p {
       line-height: 1.6;
-      margin-bottom: 20px;
-      color: #666;
+      margin-bottom: 1.5rem;
+      color: #555;
     }
-    .icon {
-      font-size: 64px;
-      margin-bottom: 20px;
-    }
-    .button {
-      background-color: #4f46e5;
+    .retry-button {
+      background-color: #3949ab;
       color: white;
       border: none;
       padding: 12px 24px;
-      border-radius: 6px;
-      font-weight: 600;
+      border-radius: 4px;
+      font-size: 16px;
       cursor: pointer;
-      transition: background-color 0.2s;
-      margin-bottom: 15px;
+      transition: background-color 0.3s;
     }
-    .button:hover {
-      background-color: #4338ca;
+    .retry-button:hover {
+      background-color: #303f9f;
     }
-    .button.secondary {
-      background-color: #e5e7eb;
-      color: #4b5563;
+    .offline-icon {
+      font-size: 64px;
+      margin-bottom: 1rem;
+      color: #5c6bc0;
     }
-    .button.secondary:hover {
-      background-color: #d1d5db;
+    .cached-data {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #eee;
     }
-    .info {
-      margin-top: 20px;
+    .cached-links {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    .cached-links li {
+      margin-bottom: 0.5rem;
+    }
+    .cached-links a {
+      color: #3949ab;
+      text-decoration: none;
+      padding: 6px 12px;
+      display: inline-block;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f5f5f5;
+    }
+    .cached-links a:hover {
+      background-color: #e8eaf6;
+    }
+    .footer {
+      margin-top: 2rem;
       font-size: 14px;
-      color: #888;
-    }
-    .timer {
-      font-size: 14px;
-      color: #888;
-      margin-top: 10px;
-    }
-    .progress {
-      width: 100%;
-      height: 4px;
-      background-color: #e5e7eb;
-      border-radius: 2px;
-      margin-top: 10px;
-      overflow: hidden;
-    }
-    .progress-bar {
-      height: 100%;
-      width: 0%;
-      background-color: #4f46e5;
-      transition: width 1s linear;
-    }
-    .buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 10px;
+      color: #999;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="icon">📶</div>
+    <div class="offline-icon">📶</div>
     <h1>You're Offline</h1>
-    <p>Don't worry! NestTask has saved your recent tasks and routines. You can still view your previously loaded content.</p>
-    <p>Some features may be limited until your connection is restored.</p>
+    <p>
+      It looks like you've been offline for more than an hour and we can't load the latest version of NestTask. We've saved some of your data for offline use, but full functionality requires an internet connection.
+    </p>
+    <button class="retry-button" id="retryButton">Reconnect</button>
     
-    <div class="buttons">
-      <button class="button" id="tryAgainBtn">Try Again</button>
-      <button class="button secondary" id="resetAppBtn">Reset App</button>
+    <div class="cached-data">
+      <h2>Available Offline</h2>
+      <p>You can still access these previously loaded pages:</p>
+      <ul class="cached-links" id="cachedPages">
+        <!-- This will be populated by JavaScript -->
+      </ul>
     </div>
     
-    <div id="autoRetryInfo" style="display: none;">
-      <div class="timer">Auto-retry in <span id="countdown">15</span> seconds</div>
-      <div class="progress">
-        <div class="progress-bar" id="progressBar"></div>
-      </div>
-    </div>
-    
-    <div class="info">
-      <p>If you were previously logged in, you can still access your cached tasks and routines.</p>
-      <p id="offlineTime"></p>
+    <div class="footer">
+      <p>NestTask PWA - Offline Mode</p>
+      <p id="lastSync">Last synced: Unknown</p>
     </div>
   </div>
 
   <script>
-    // Get the time we went offline from localStorage if available
-    const offlineStartTime = localStorage.getItem('offline_start_time');
-    const offlineTimeElem = document.getElementById('offlineTime');
+    // Check if the browser is back online
+    window.addEventListener('online', () => {
+      document.getElementById('retryButton').textContent = 'You are back online! Refresh';
+    });
     
-    if (offlineStartTime) {
-      const offlineDuration = Math.floor((Date.now() - parseInt(offlineStartTime)) / 1000 / 60);
-      offlineTimeElem.textContent = `You've been offline for approximately ${offlineDuration} minutes.`;
-    }
-    
-    // Handle try again button
-    document.getElementById('tryAgainBtn').addEventListener('click', () => {
-      // Clear any service worker issues that might be preventing the app from loading
-      if ('serviceWorker' in navigator) {
-        // First try to reload with existing service worker
+    // Handle retry button click
+    document.getElementById('retryButton').addEventListener('click', () => {
+      if (navigator.onLine) {
         window.location.href = '/';
       } else {
-        window.location.reload();
+        alert('Still offline. Please check your internet connection and try again.');
       }
     });
     
-    // Handle reset app button (more aggressive recovery)
-    document.getElementById('resetAppBtn').addEventListener('click', async () => {
-      if ('serviceWorker' in navigator) {
-        try {
-          // Unregister all service workers
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          for (const registration of registrations) {
-            await registration.unregister();
-          }
+    // Try to get last sync time from IndexedDB
+    if ('indexedDB' in window) {
+      const request = indexedDB.open('nesttask-db', 1);
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        if (db.objectStoreNames.contains('metadata')) {
+          const tx = db.transaction('metadata', 'readonly');
+          const store = tx.objectStore('metadata');
+          const getLastSync = store.get('lastSync');
           
-          // Clear caches
-          if ('caches' in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
-          }
+          getLastSync.onsuccess = () => {
+            if (getLastSync.result) {
+              const lastSyncDate = new Date(getLastSync.result.timestamp);
+              document.getElementById('lastSync').textContent = 
+                `Last synced: ${lastSyncDate.toLocaleString()}`;
+            }
+          };
+        }
+      };
+    }
+    
+    // Check for cached pages
+    if ('caches' in window) {
+      caches.open('nesttask-cache-v1').then(cache => {
+        cache.keys().then(requests => {
+          const cachedPagesList = document.getElementById('cachedPages');
+          const cachedPages = new Set();
           
-          alert('App reset complete. The app will now reload.');
-          window.location.href = '/?fresh=' + Date.now();
-        } catch (error) {
-          console.error('Error resetting app:', error);
-          alert('Failed to reset app: ' + error.message);
-        }
-      } else {
-        window.location.reload();
-      }
-    });
-    
-    // Auto-retry mechanism
-    let countdown = 15;
-    const countdownElem = document.getElementById('countdown');
-    const progressBar = document.getElementById('progressBar');
-    const autoRetryInfo = document.getElementById('autoRetryInfo');
-    
-    // Start auto-retry countdown after 5 seconds
-    setTimeout(() => {
-      autoRetryInfo.style.display = 'block';
-      progressBar.style.width = '0%';
-      
-      const timer = setInterval(() => {
-        countdown--;
-        countdownElem.textContent = countdown.toString();
-        progressBar.style.width = `${((15 - countdown) / 15) * 100}%`;
-        
-        if (countdown <= 0) {
-          clearInterval(timer);
-          // Try to recover the app by forcing a reload
-          window.location.href = '/?reload=' + Date.now();
-        }
-      }, 1000);
-    }, 5000);
-    
-    // Check if we're back online
-    window.addEventListener('online', () => {
-      // Add a timestamp to prevent cache issues
-      window.location.href = '/?online=' + Date.now();
-    });
-    
-    // Store the time we went offline if not already set
-    if (!offlineStartTime) {
-      localStorage.setItem('offline_start_time', Date.now().toString());
+          requests.forEach(request => {
+            const url = new URL(request.url);
+            if (url.origin === location.origin && url.pathname !== '/offline.html') {
+              let pageName = url.pathname;
+              if (pageName === '/' || pageName === '/index.html') {
+                pageName = 'Home';
+              } else {
+                // Convert paths like /tasks to "Tasks"
+                pageName = pageName.replace(/\//g, '');
+                pageName = pageName.charAt(0).toUpperCase() + pageName.slice(1);
+              }
+              
+              if (!cachedPages.has(pageName) && pageName) {
+                cachedPages.add(pageName);
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = url.pathname;
+                a.textContent = pageName;
+                li.appendChild(a);
+                cachedPagesList.appendChild(li);
+              }
+            }
+          });
+          
+          if (cachedPages.size === 0) {
+            cachedPagesList.innerHTML = '<li>No cached pages available</li>';
+          }
+        });
+      });
     }
   </script>
 </body>

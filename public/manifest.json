@@ -1,51 +1,68 @@
 {
-  "name": "NestTask",
+  "name": "NestTask - School Management System",
   "short_name": "NestTask",
-  "description": "A modern task management application for teams and individuals",
-  "start_url": "/",
+  "description": "A comprehensive school management application for teachers, students and administrators",
+  "start_url": "/?source=pwa",
+  "id": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0284c7",
-  "orientation": "portrait-primary",
+  "background_color": "#f5f5f5",
+  "theme_color": "#3949ab",
+  "orientation": "any",
+  "scope": "/",
   "icons": [
     {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
       "type": "image/png",
+      "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
-      "sizes": "512x512",
+      "src": "logo512.png",
       "type": "image/png",
+      "sizes": "512x512",
       "purpose": "any maskable"
     }
   ],
   "shortcuts": [
     {
-      "name": "Add Task",
-      "short_name": "Add Task",
-      "description": "Create a new task",
-      "url": "/?action=new-task",
-      "icons": [{ "src": "/icons/add-task.png", "sizes": "192x192" }]
+      "name": "Tasks",
+      "url": "/tasks",
+      "icons": [
+        {
+          "src": "icons/tasks.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
-      "name": "View Tasks",
-      "short_name": "Tasks",
-      "description": "View your tasks",
-      "url": "/?view=tasks",
-      "icons": [{ "src": "/icons/view-tasks.png", "sizes": "192x192" }]
+      "name": "Teachers",
+      "url": "/teachers",
+      "icons": [
+        {
+          "src": "icons/teachers.png",
+          "sizes": "96x96"
+        }
+      ]
     }
   ],
   "screenshots": [
     {
-      "src": "https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&q=80&w=2070",
-      "sizes": "2070x1380",
-      "type": "image/jpeg",
-      "form_factor": "wide",
-      "label": "NestTask Dashboard"
+      "src": "screenshot1.png",
+      "type": "image/png",
+      "sizes": "1280x720"
+    },
+    {
+      "src": "screenshot2.png",
+      "type": "image/png",
+      "sizes": "1280x720"
     }
   ],
-  "categories": ["productivity", "utilities"],
+  "categories": ["education", "productivity"],
+  "related_applications": [],
   "prefer_related_applications": false
 }

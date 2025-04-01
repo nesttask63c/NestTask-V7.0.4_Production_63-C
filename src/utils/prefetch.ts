@@ -7,7 +7,6 @@ export interface PrefetchOptions {
   priority?: 'high' | 'medium' | 'low';
   timeout?: number;
   keepAlive?: boolean;
-  forceCache?: boolean; // Add option to force caching even when offline
 }
 
 // Map to track which routes have been prefetched to avoid duplicate work
@@ -42,9 +41,7 @@ export const prefetchApiData = async (
   storeName: string = STORES.USER_DATA,
   options: PrefetchOptions = {}
 ) => {
-  // Skip if already prefetched or if we're offline and not forcing cache
-  if (prefetchedQueries.has(cacheKey) && !options.forceCache) return;
-  if (!navigator.onLine && !options.forceCache) return;
+  if (prefetchedQueries.has(cacheKey) || !navigator.onLine) return;
   
   // Mark as prefetched immediately to prevent duplicate requests
   prefetchedQueries.set(cacheKey, true);
@@ -81,8 +78,7 @@ export const prefetchApiData = async (
         value: timestamp 
       });
       
-      console.debug(`Prefetched and cached ${data.length || 0} items for ${cacheKey}`);
-      return data;
+      console.debug(`Prefetched and cached ${cacheKey}`);
     }
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -93,33 +89,7 @@ export const prefetchApiData = async (
     
     // Remove from prefetched queries if it failed
     prefetchedQueries.delete(cacheKey);
-    return null;
   }
-};
-
-/**
- * Alternative way to prefetch API data using a loader object
- * @param options Object containing loader and options
- */
-export const prefetchApiDataWithLoader = async (options: {
-  loader: {
-    tableName: string;
-    queryFn: (query: any) => any;
-    storeName: string;
-  };
-  options?: PrefetchOptions;
-  key: string;
-}) => {
-  const { tableName, queryFn, storeName } = options.loader;
-  const { forceCache = false } = options.options || {};
-  
-  return prefetchApiData(
-    tableName,
-    queryFn,
-    options.key,
-    storeName,
-    { ...options.options, forceCache }
-  );
 };
 
 /**
@@ -148,16 +118,8 @@ export const prefetchResources = async (resources: Array<{
     if (resource.type === 'route') {
       prefetchRoute(resource.loader, resource.key);
     } else if (resource.type === 'api' && resource.loader) {
-      if (typeof resource.loader === 'object' && resource.loader.tableName && resource.loader.queryFn) {
-        prefetchApiDataWithLoader({
-          loader: resource.loader,
-          options: resource.options,
-          key: resource.key
-        });
-      } else {
-        const { tableName, queryFn, storeName } = resource.loader;
-        prefetchApiData(tableName, queryFn, resource.key, storeName, resource.options);
-      }
+      const { tableName, queryFn, storeName } = resource.loader;
+      prefetchApiData(tableName, queryFn, resource.key, storeName, resource.options);
     } else if (resource.type === 'asset' && typeof resource.loader === 'string') {
       prefetchAsset(resource.loader);
     }
@@ -172,16 +134,8 @@ export const prefetchResources = async (resources: Array<{
         if (resource.type === 'route') {
           prefetchRoute(resource.loader, resource.key);
         } else if (resource.type === 'api' && resource.loader) {
-          if (typeof resource.loader === 'object' && resource.loader.tableName && resource.loader.queryFn) {
-            prefetchApiDataWithLoader({
-              loader: resource.loader,
-              options: resource.options,
-              key: resource.key
-            });
-          } else {
-            const { tableName, queryFn, storeName } = resource.loader;
-            prefetchApiData(tableName, queryFn, resource.key, storeName, resource.options);
-          }
+          const { tableName, queryFn, storeName } = resource.loader;
+          prefetchApiData(tableName, queryFn, resource.key, storeName, resource.options);
         } else if (resource.type === 'asset' && typeof resource.loader === 'string') {
           prefetchAsset(resource.loader);
         }
