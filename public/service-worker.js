@@ -1,33 +1,75 @@
-const CACHE_NAME = 'nesttask-cache-v1';
+const CACHE_NAME = 'nesttask-v3';
 const OFFLINE_URL = '/offline.html';
 
-// Assets to cache for offline use
-const urlsToCache = [
+// Assets to cache on install
+const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/offline.html',
-  '/static/css/main.css',
-  '/static/js/main.js',
-  '/static/js/bundle.js',
-  '/static/media/logo.png',
   '/manifest.json',
-  '/favicon.ico'
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+  '/icons/add-task.png',
+  '/icons/view-tasks.png',
+  '/icons/badge.png',
+  // Add core app routes HTML
+  '/home',
+  '/upcoming',
+  '/search',
+  '/routine',
+  '/courses',
+  '/profile'
 ];
 
-// Install event - cache critical assets
+// Dynamic assets that should be cached during runtime
+const RUNTIME_CACHE_PATTERNS = [
+  /\.(js|css)$/, // JS and CSS files
+  /assets\/.*\.(js|css|woff2|png|jpg|svg)$/, // Vite build assets
+  /\/icons\/.*\.png$/, // Icon images
+  /^https:\/\/fonts\.googleapis\.com/, // Google fonts stylesheets
+  /^https:\/\/fonts\.gstatic\.com/ // Google fonts files
+];
+
+// Create sync queues for different operations
+let taskQueue, routineQueue, courseTeacherQueue;
+
+// Initialize background sync if supported
+function initBackgroundSync() {
+  if ('sync' in self.registration) {
+    // Create queues for different types of operations
+    taskQueue = new workbox.backgroundSync.Queue('taskQueue', {
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days (in minutes) - Increased from 24 hours
+    });
+    
+    routineQueue = new workbox.backgroundSync.Queue('routineQueue', {
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days - Increased from 24 hours
+    });
+    
+    courseTeacherQueue = new workbox.backgroundSync.Queue('courseTeacherQueue', {
+      maxRetentionTime: 7 * 24 * 60 // Retry for up to 7 days - Increased from 24 hours
+    });
+    
+    console.log('Background sync initialized');
+  }
+}
+
+// Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-      .catch(error => {
-        console.error('Service worker installation failed:', error);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS);
+    })
   );
-  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
+  
+  // Initialize background sync if available
+  if ('workbox' in self) {
+    try {
+      initBackgroundSync();
+    } catch (error) {
+      console.error('Error initializing background sync:', error);
+    }
+  }
 });
 
 // Activate event - clean up old caches
@@ -35,216 +77,458 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
+        cacheNames
+          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .map((cacheName) => caches.delete(cacheName))
       );
     })
   );
-  // Ensure the service worker takes control of all clients
   self.clients.claim();
 });
 
-// Network-first with cache fallback strategy
+// Helper function to determine if a URL should be cached at runtime
+function shouldCacheAtRuntime(url) {
+  try {
+    // Skip unsupported URL schemes
+    const urlObj = new URL(url);
+    if (urlObj.protocol === 'chrome-extension:' || 
+        urlObj.protocol === 'chrome:' ||
+        urlObj.protocol === 'edge:' ||
+        urlObj.protocol === 'brave:' ||
+        urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+      return false;
+    }
+    
+    // Don't cache Supabase API requests
+    if (url.includes('supabase.co')) {
+      return false;
+    }
+    
+    // Check if the URL matches any of our patterns
+    return RUNTIME_CACHE_PATTERNS.some(pattern => pattern.test(url));
+  } catch (error) {
+    console.error('Error checking URL for caching:', error, url);
+    return false;
+  }
+}
+
+// SPA Routes to handle with the app router
+const SPA_ROUTES = [
+  '/home',
+  '/upcoming',
+  '/search',
+  '/notifications',
+  '/courses',
+  '/study-materials',
+  '/routine',
+  '/admin',
+  '/settings',
+  '/profile',
+];
+
+// Fetch event - stale-while-revalidate strategy for assets, network-first for API
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
+  // Handle non-GET requests with background sync for offline support
+  if (event.request.method !== 'GET') {
+    // Process API requests for background sync when offline
+    if (
+      event.request.url.includes('/api/tasks') || 
+      event.request.url.includes('/api/routines') || 
+      event.request.url.includes('/api/courses') || 
+      event.request.url.includes('/api/teachers')
+    ) {
+      // Only use background sync if offline and queues are available
+      if (!self.navigator.onLine && 'workbox' in self) {
+        const url = new URL(event.request.url);
+        
+        // Choose the appropriate queue based on the API endpoint
+        let queue;
+        if (url.pathname.includes('/tasks')) {
+          queue = taskQueue;
+        } else if (url.pathname.includes('/routines')) {
+          queue = routineQueue;
+        } else if (url.pathname.includes('/courses') || url.pathname.includes('/teachers')) {
+          queue = courseTeacherQueue;
+        }
+        
+        // Add to queue if available
+        if (queue) {
+          event.respondWith(
+            fetch(event.request.clone())
+              .catch((error) => {
+                console.log('Queuing failed request for background sync', error);
+                queue.pushRequest({ request: event.request });
+                return new Response(JSON.stringify({ 
+                  status: 'queued',
+                  message: 'Request queued for background sync'
+                }), {
+                  headers: { 'Content-Type': 'application/json' },
+                  status: 202
+                });
+              })
+          );
+          return;
+        }
+      }
+    }
+    
+    // For other non-GET requests, proceed normally
     return;
   }
 
-  // Handle API requests differently (network-only with timeout fallback)
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(
-      timeoutNetworkFirst(event.request, 5000)
-    );
-    return;
-  }
+  try {
+    const url = new URL(event.request.url);
 
-  // For navigation requests (HTML pages), use network-first strategy
-  if (event.request.mode === 'navigate') {
+    // Skip unsupported URL schemes
+    if (url.protocol === 'chrome-extension:' || 
+        url.protocol === 'chrome:' ||
+        url.protocol === 'edge:' ||
+        url.protocol === 'brave:' ||
+        url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return;
+    }
+
+    // Skip Supabase API requests (let them go to network)
+    if (url.hostname.includes('supabase.co')) {
+      return;
+    }
+
+    // Special handling for SPA routes - always serve index.html
+    if (event.request.mode === 'navigate') {
+      const isSpaRoute = SPA_ROUTES.some(route => 
+        url.pathname === route || url.pathname.startsWith(`${route}/`)
+      );
+      
+      if (isSpaRoute) {
+        event.respondWith(
+          caches.match('/index.html')
+            .then(response => {
+              if (response) {
+                return response;
+              }
+              return fetch('/index.html');
+            })
+            .catch(() => {
+              return caches.match(OFFLINE_URL);
+            })
+        );
+        return;
+      }
+    }
+
+    // Check for module scripts
+    const isModuleScript = event.request.destination === 'script' && 
+                           (url.pathname.endsWith('.mjs') || url.pathname.includes('assets/'));
+    
+    // For module scripts, ensure proper handling
+    if (isModuleScript) {
+      event.respondWith(
+        fetch(event.request)
+          .then(response => {
+            if (response.ok) {
+              // Only cache if response is valid
+              const responseClone = response.clone();
+              safeCachePut(CACHE_NAME, event.request, responseClone);
+            }
+            return response;
+          })
+          .catch(async () => {
+            // Fallback to cache
+            const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
+            return cachedResponse || new Response('Module not available', { status: 404 });
+          })
+      );
+      return;
+    }
+
+    // Navigation requests (HTML pages) - network first
+    if (event.request.mode === 'navigate') {
+      event.respondWith(
+        fetch(event.request)
+          .then(response => {
+            // Cache the latest version
+            const responseClone = response.clone();
+            safeCachePut(CACHE_NAME, event.request, responseClone);
+            return response;
+          })
+          .catch(async () => {
+            // Offline fallback
+            const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
+            if (cachedResponse) return cachedResponse;
+            
+            // If no cached version, show offline page
+            return safeCacheMatch(CACHE_NAME, OFFLINE_URL);
+          })
+      );
+      return;
+    }
+
+    // For runtime-cacheable assets (JS, CSS, images) - stale-while-revalidate
+    if (shouldCacheAtRuntime(event.request.url)) {
+      event.respondWith(
+        (async () => {
+          // Try to get from cache first
+          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
+          
+          // Fetch from network in background
+          const fetchPromise = fetch(event.request)
+            .then(networkResponse => {
+              // Cache the new version
+              safeCachePut(CACHE_NAME, event.request, networkResponse.clone());
+              return networkResponse;
+            })
+            .catch(() => {
+              // If fetch fails, return cached or null
+              return cachedResponse || null;
+            });
+            
+          // Return cached response immediately, or wait for network
+          return cachedResponse || fetchPromise;
+        })()
+      );
+      return;
+    }
+
+    // For all other requests - network first with cache fallback
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          // Cache a copy of the response
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
+          // Cache successful responses that match patterns
+          if (response.ok && shouldCacheAtRuntime(event.request.url)) {
+            const responseClone = response.clone();
+            safeCachePut(CACHE_NAME, event.request, responseClone);
+          }
           return response;
         })
-        .catch(() => {
-          // If network fails, try to serve from cache
-          return caches.match(event.request)
-            .then(cachedResponse => {
-              if (cachedResponse) {
-                return cachedResponse;
-              }
-              // If not in cache, serve the offline page
-              return caches.match(OFFLINE_URL);
-            });
+        .catch(async () => {
+          // Try to get from cache
+          const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
+          if (cachedResponse) return cachedResponse;
+
+          // Return error response
+          return new Response('Network error', { status: 408 });
         })
     );
+  } catch (error) {
+    console.error('Error in fetch handler:', error, event.request.url);
+    // Let the browser handle this request normally
     return;
   }
+});
 
-  // For other requests (CSS, JS, images), use cache-first strategy
-  event.respondWith(
-    caches.match(event.request)
-      .then(cachedResponse => {
-        if (cachedResponse) {
-          // Return from cache and update cache in background
-          fetchAndUpdateCache(event.request);
-          return cachedResponse;
+// Handle sync events for background data synchronization
+self.addEventListener('sync', (event) => {
+  console.log('Sync event received:', event.tag);
+  
+  if (!('workbox' in self)) {
+    console.log('Workbox not available for background sync');
+    return;
+  }
+  
+  if (event.tag === 'taskSync' && taskQueue) {
+    event.waitUntil(taskQueue.replayRequests().then(() => {
+      // Notify clients that sync is complete
+      notifyClientsOfSync('task');
+    }));
+  } else if (event.tag === 'routineSync' && routineQueue) {
+    event.waitUntil(routineQueue.replayRequests().then(() => {
+      notifyClientsOfSync('routine');
+    }));
+  } else if (event.tag === 'courseTeacherSync' && courseTeacherQueue) {
+    event.waitUntil(courseTeacherQueue.replayRequests().then(() => {
+      notifyClientsOfSync('courseTeacher');
+    }));
+  }
+});
+
+// Helper function to notify clients of sync completion
+function notifyClientsOfSync(category) {
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'BACKGROUND_SYNC_COMPLETED',
+        category: category
+      });
+    });
+  });
+}
+
+// Push notification handler
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
+    const options = {
+      body: data.body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/badge.png',
+      vibrate: [100, 50, 100],
+      data: {
+        url: data.data?.url || '/',
+        taskId: data.data?.taskId,
+        type: data.data?.type
+      },
+      actions: data.actions || [
+        {
+          action: 'open',
+          title: 'Open',
+          icon: '/icons/icon-192x192.png'
         }
-        // Not in cache, fetch from network
-        return fetch(event.request)
-          .then(response => {
-            // Cache the fetched response
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            });
-            return response;
-          })
-          .catch(error => {
-            console.error('Fetch failed:', error);
-            // For image requests, you could return a placeholder
-            if (event.request.url.match(/\.(jpg|jpeg|png|gif|svg)$/)) {
-              return caches.match('/static/media/placeholder.png');
+      ],
+      tag: data.tag || 'default',
+      renotify: true,
+      requireInteraction: true
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  } catch (error) {
+    console.error('Error handling push notification:', error);
+  }
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'close') return;
+
+  const urlToOpen = event.notification.data?.url || '/';
+  const taskId = event.notification.data?.taskId;
+  const notificationType = event.notification.data?.type;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((windowClients) => {
+        // Check if there is already a window/tab open with the target URL
+        const hadWindowToFocus = windowClients.some((windowClient) => {
+          if (windowClient.url === urlToOpen) {
+            // Focus if already open
+            windowClient.focus();
+            // Send message to client to handle the notification action
+            if (taskId) {
+              windowClient.postMessage({
+                type: 'NOTIFICATION_CLICK',
+                taskId: taskId,
+                notificationType: notificationType
+              });
+            }
+            return true;
+          }
+          return false;
+        });
+
+        // If no window with target URL, open a new one
+        if (!hadWindowToFocus) {
+          return clients.openWindow(urlToOpen).then((windowClient) => {
+            // Send message to newly opened client after a short delay
+            // to ensure the app has loaded
+            if (windowClient && taskId) {
+              setTimeout(() => {
+                windowClient.postMessage({
+                  type: 'NOTIFICATION_CLICK',
+                  taskId: taskId,
+                  notificationType: notificationType
+                });
+              }, 1000);
             }
           });
+        }
       })
   );
 });
 
-// Function to fetch and update cache in background
-function fetchAndUpdateCache(request) {
-  fetch(request)
-    .then(response => {
-      if (!response || response.status !== 200 || response.type !== 'basic') {
-        return;
-      }
-      caches.open(CACHE_NAME).then(cache => {
-        cache.put(request, response);
-      });
-    })
-    .catch(error => {
-      console.log('Background fetch failed:', error);
-    });
+// Helper function to safely put items in cache
+async function safeCachePut(cacheName, request, response) {
+  try {
+    // Clone the response to avoid consuming it
+    const responseToCache = response.clone();
+    
+    // Only cache valid responses
+    if (!responseToCache || responseToCache.status !== 200) {
+      return;
+    }
+    
+    const cache = await caches.open(cacheName);
+    await cache.put(request, responseToCache);
+  } catch (error) {
+    console.error('Error caching response:', error);
+  }
 }
 
-// Network request with timeout
-function timeoutNetworkFirst(request, timeout) {
-  return new Promise(resolve => {
-    let timeoutId;
-    
-    // Set timeout for network request
-    const timeoutPromise = new Promise(resolveTimeout => {
-      timeoutId = setTimeout(() => {
-        // Check cache if timeout occurs
-        caches.match(request).then(cachedResponse => {
-          if (cachedResponse) {
-            console.log('Timeout, serving from cache:', request.url);
-            resolveTimeout(cachedResponse);
-          } else {
-            console.log('No cached data available after timeout');
-            // If API request fails and no cache, return empty JSON with offline flag
-            resolveTimeout(new Response(JSON.stringify({ 
-              offline: true, 
-              message: 'You are offline. Some data may not be available.' 
-            }), {
-              headers: { 'Content-Type': 'application/json' }
-            }));
-          }
-        });
-      }, timeout);
-    });
-    
-    // Try network request
-    const fetchPromise = fetch(request).then(response => {
-      clearTimeout(timeoutId);
-      
-      // Cache the response for future offline use
-      const responseClone = response.clone();
-      caches.open(CACHE_NAME).then(cache => {
-        cache.put(request, responseClone);
-      });
-      
-      return response;
-    }).catch(error => {
-      clearTimeout(timeoutId);
-      console.error('Network fetch failed:', error);
-      
-      // Try to get from cache
-      return caches.match(request).then(cachedResponse => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        // Return offline JSON response
-        return new Response(JSON.stringify({ 
-          offline: true, 
-          message: 'You are offline. Some data may not be available.' 
-        }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      });
-    });
-    
-    // Race between timeout and fetch
-    Promise.race([fetchPromise, timeoutPromise])
-      .then(response => resolve(response));
-  });
+// Helper function to safely match items in cache
+async function safeCacheMatch(cacheName, request) {
+  try {
+    const cache = await caches.open(cacheName);
+    return await cache.match(request);
+  } catch (error) {
+    console.error('Error matching cache:', error);
+    return null;
+  }
 }
 
-// Listen for the 'message' event to handle cache updates
+// Add a message handler for keep-alive pings
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-  
-  // Handle manual cache refresh
-  if (event.data && event.data.type === 'REFRESH_CACHE') {
-    event.waitUntil(
-      caches.open(CACHE_NAME)
-        .then((cache) => {
-          return cache.addAll(urlsToCache);
-        })
-        .then(() => {
-          console.log('Cache refreshed successfully');
-          // Notify clients that cache was updated
-          self.clients.matchAll().then(clients => {
-            clients.forEach(client => {
-              client.postMessage({
-                type: 'CACHE_UPDATED',
-                timestamp: new Date().getTime()
-              });
-            });
-          });
-        })
-    );
-  }
-});
-
-// Periodic cache validation - check every 30 minutes if the app is open
-setInterval(() => {
-  self.clients.matchAll().then(clients => {
-    if (clients.length > 0) {
-      console.log('Validating cache contents');
-      caches.open(CACHE_NAME).then(cache => {
-        // Refresh critical resources
-        urlsToCache.forEach(url => {
-          fetch(url, { cache: 'no-store' })
-            .then(response => {
-              if (response.ok) {
-                cache.put(url, response);
-              }
-            })
-            .catch(err => console.log('Failed to refresh cache for:', url, err));
-        });
+  if (event.data && event.data.type === 'KEEP_ALIVE') {
+    console.log('Keep-alive ping received at', new Date(event.data.timestamp).toISOString());
+    
+    // Respond to the keep-alive to confirm service worker is active
+    if (event.source) {
+      event.source.postMessage({
+        type: 'KEEP_ALIVE_RESPONSE',
+        timestamp: Date.now()
       });
     }
-  });
-}, 30 * 60 * 1000); // 30 minutes
+    
+    // Optional: refresh certain caches if needed
+    // This helps keep critical data fresh in long offline periods
+    if (event.data.reason === 'visibilitychange') {
+      console.log('Refreshing critical caches on visibility change');
+      
+      caches.open(CACHE_NAME).then(cache => {
+        // Refresh the main index.html on visibility change
+        fetch('/index.html')
+          .then(response => {
+            if (response.ok) {
+              cache.put('/index.html', response);
+            }
+          })
+          .catch(err => console.error('Failed to refresh index.html:', err));
+      });
+    }
+  } else if (event.data && event.data.type === 'SYNC_NOW') {
+    console.log('SYNC_NOW message received, attempting immediate sync');
+    
+    // Verify workbox and queue availability
+    if ('workbox' in self && taskQueue && routineQueue && courseTeacherQueue) {
+      // Try to perform sync for all queues
+      Promise.allSettled([
+        taskQueue.replayRequests(),
+        routineQueue.replayRequests(), 
+        courseTeacherQueue.replayRequests()
+      ]).then(results => {
+        console.log('Sync attempts completed:', results);
+        
+        // Notify all clients that sync was attempted
+        self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'SYNC_NOW_COMPLETED',
+              results: results.map(r => r.status)
+            });
+          });
+        });
+      });
+    } else {
+      console.warn('Cannot perform immediate sync: workbox or queues not available');
+      if (event.source) {
+        event.source.postMessage({
+          type: 'SYNC_NOW_ERROR',
+          error: 'Background sync not available'
+        });
+      }
+    }
+  }
+});
