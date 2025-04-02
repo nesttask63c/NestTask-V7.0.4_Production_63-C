@@ -177,9 +177,10 @@ export async function initPWA() {
   // Check if we're recovering from a long offline period
   const offlineTimestamp = localStorage.getItem('sw_offline_timestamp');
   let wasOfflineLong = false;
+  let offlineDuration = 0;
   
   if (offlineTimestamp && navigator.onLine) {
-    const offlineDuration = Date.now() - parseInt(offlineTimestamp);
+    offlineDuration = Date.now() - parseInt(offlineTimestamp);
     // If we were offline for more than an hour
     if (offlineDuration > 60 * 60 * 1000) {
       console.log(`Recovering from long offline period (${Math.round(offlineDuration/60000)} minutes)`);
@@ -190,8 +191,32 @@ export async function initPWA() {
     }
   }
   
-  // If we're recovering from a long offline period, clean up stale data first
+  // If we're recovering from a long offline period, take immediate action
   if (wasOfflineLong) {
+    // First thing: force re-register the service worker
+    if ('serviceWorker' in navigator) {
+      try {
+        // Check for existing registrations and remove them
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          console.log('Unregistering stale service worker');
+          await registration.unregister();
+        }
+        
+        // Register a fresh service worker
+        console.log('Registering fresh service worker after extended offline period');
+        const newRegistration = await navigator.serviceWorker.register('/service-worker.js', {
+          scope: '/',
+          updateViaCache: 'none'
+        });
+        
+        console.log('New service worker registered successfully');
+      } catch (error) {
+        console.error('Error refreshing service worker:', error);
+      }
+    }
+    
+    // Then clean up stale data
     try {
       await cleanupStaleCacheData();
     } catch (error) {
@@ -206,20 +231,23 @@ export async function initPWA() {
       .catch((err: Error) => console.error('Error checking installability:', err));
     
     // Step 2: Register service worker (critical for offline functionality)
-    const registration = await registerServiceWorker()
-      .catch((err: Error) => {
-        console.error('Error registering service worker:', err);
-        return null;
-      });
-    
-    // If we failed to register the service worker and were offline for a long time,
-    // this is a serious issue - reload the page to try again
-    if (!registration && wasOfflineLong) {
-      console.log('Failed to register service worker after long offline period, reloading...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-      return false;
+    // Skip if we already registered a fresh one above
+    if (!wasOfflineLong) {
+      const registration = await registerServiceWorker()
+        .catch((err: Error) => {
+          console.error('Error registering service worker:', err);
+          return null;
+        });
+      
+      // If we failed to register the service worker and were offline for a long time,
+      // this is a serious issue - reload the page to try again
+      if (!registration && wasOfflineLong) {
+        console.log('Failed to register service worker after long offline period, reloading...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+        return false;
+      }
     }
     
     // Step 3: Setup other PWA features in parallel
@@ -230,10 +258,15 @@ export async function initPWA() {
       Promise.resolve().then(setupOfflineDetection)
     ]);
     
-    // Step 4: If we had been offline for a long time, immediately perform 
-    // cache cleanup to ensure a stable state
-    if (wasOfflineLong) {
-      // Schedule a cleanup for the next idle time
+    // Step 4: For long offline periods, schedule an automatic refresh
+    // This helps reset the app state completely after being offline
+    if (wasOfflineLong && offlineDuration > 3 * 60 * 60 * 1000) { // More than 3 hours offline
+      console.log('Scheduling automatic refresh after extended offline period');
+      setTimeout(() => {
+        window.location.reload();
+      }, 15000); // Give the app 15 seconds to initialize before refreshing
+    } else if (wasOfflineLong) {
+      // Only schedule cleanup for shorter offline periods
       if ('requestIdleCallback' in window) {
         (window as any).requestIdleCallback(() => {
           cleanupStaleCacheData().catch((err: Error) => 

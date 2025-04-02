@@ -44,10 +44,10 @@ const customStorage = {
                       const payload = JSON.parse(atob(session.access_token.split('.')[1]));
                       const exp = payload.exp * 1000; // convert to ms
                       
-                      // If token will expire in less than 7 days in offline mode,
+                      // More aggressive token extension - if offline or token expires in less than 7 days,
                       // extend it by 30 days to ensure offline functionality
-                      if (exp - Date.now() < 7 * 24 * 60 * 60 * 1000 && !navigator.onLine) {
-                        console.log('Extending session token expiration for offline use');
+                      if ((exp - Date.now() < 7 * 24 * 60 * 60 * 1000) || !navigator.onLine) {
+                        console.log('Extending session token expiration for offline use or approaching expiration');
                         
                         // Set a new expiration 30 days from now
                         const newExp = Date.now() + (30 * 24 * 60 * 60 * 1000);
@@ -56,6 +56,10 @@ const customStorage = {
                         // We can't modify the JWT itself, but we can update the expires_at
                         // in the session object to prevent auto-logout
                         session.expires_at = Math.floor(newExp / 1000);
+                        
+                        // Also update timestamps to help with cache validation
+                        session._extended_at = Date.now();
+                        session._offline_extension = true;
                         
                         // Store the modified session
                         customStorage.setItem(key, JSON.stringify(session));

@@ -303,19 +303,32 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(async () => {
-            // Try to get from cache
+            console.log(`Network request failed for navigation: ${event.request.url}, trying cache`);
+            
+            // Try to get from cache - first the exact URL
             const cachedResponse = await safeCacheMatch(CACHE_NAME, event.request);
             
-            // If not in cache, serve offline page
-            if (!cachedResponse) {
-              const offlineResponse = await safeCacheMatch(CACHE_NAME, new Request(OFFLINE_URL));
-              return offlineResponse || new Response('Offline page not available', {
-                status: 503,
-                headers: { 'Content-Type': 'text/html' }
-              });
+            if (cachedResponse) {
+              console.log(`Found cached response for: ${event.request.url}`);
+              return cachedResponse;
             }
             
-            return cachedResponse;
+            // If not in cache, try index.html for SPA routes
+            console.log(`No cache for: ${event.request.url}, trying index.html`);
+            const indexResponse = await safeCacheMatch(CACHE_NAME, new Request('/index.html'));
+            
+            if (indexResponse) {
+              console.log('Serving index.html as fallback');
+              return indexResponse;
+            }
+            
+            // As a last resort, serve offline page
+            console.log('Serving offline page as last resort');
+            const offlineResponse = await safeCacheMatch(CACHE_NAME, new Request(OFFLINE_URL));
+            return offlineResponse || new Response('Offline page not available', {
+              status: 503,
+              headers: { 'Content-Type': 'text/html' }
+            });
           })
       );
       return;

@@ -273,7 +273,18 @@ export async function cleanupStaleCacheData(): Promise<void> {
     // 1. Clear any items in IndexedDB older than 7 days
     const db = await openDatabase();
     const stores = [...Object.values(STORES)];
-    const cutoffTime = now - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+    const cutoffTime = now - (7 * 24 * 60 * 60 * 1000);
+    
+    // Critical paths to preserve even if they're old
+    const criticalPaths = [
+      '/index.html',
+      '/offline.html',
+      '/manifest.json',
+      '/service-worker.js',
+      '/',
+      '/icons/icon-192x192.png',
+      '/icons/icon-512x512.png'
+    ];
     
     // Process each store to remove stale data
     await Promise.all(stores.map(storeName => {
@@ -288,6 +299,13 @@ export async function cleanupStaleCacheData(): Promise<void> {
             const cursor = (event.target as IDBRequest).result;
             if (cursor) {
               const item = cursor.value;
+              
+              // Skip auth tokens - they're handled separately with their own expiration logic
+              if (storeName === 'auth' || 
+                 (item && item.key && item.key.includes('supabase.auth.token'))) {
+                cursor.continue();
+                return;
+              }
               
               // Check if the item has a timestamp and is older than cutoff
               if (item.updated_at && new Date(item.updated_at).getTime() < cutoffTime) {
@@ -342,6 +360,12 @@ export async function cleanupStaleCacheData(): Promise<void> {
           // For each cached request, check if it's stale
           await Promise.all(requests.map(async (request) => {
             try {
+              // Never delete critical paths
+              if (criticalPaths.includes(new URL(request.url).pathname)) {
+                console.log(`Preserving critical path: ${request.url}`);
+                return;
+              }
+              
               const response = await cache.match(request);
               if (!response) return;
               
