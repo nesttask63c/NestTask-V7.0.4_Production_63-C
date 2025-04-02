@@ -1,3 +1,4 @@
+import React from 'react';
 import { Menu, X } from 'lucide-react';
 
 interface MobileMenuButtonProps {
@@ -5,13 +6,16 @@ interface MobileMenuButtonProps {
   onClick: () => void;
 }
 
-export function MobileMenuButton({ isOpen, onClick }: MobileMenuButtonProps) {
+export const MobileMenuButton = React.memo(function MobileMenuButton({ 
+  isOpen, 
+  onClick 
+}: MobileMenuButtonProps) {
   return (
     <button
       onClick={onClick}
       className={`
         lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl shadow-lg 
-        transition-all duration-300 transform
+        transition-all duration-300 transform will-change-transform
         ${isOpen 
           ? 'bg-white dark:bg-gray-800 rotate-90' 
           : 'bg-gradient-to-r from-blue-600 to-indigo-600'}
@@ -25,4 +29,4 @@ export function MobileMenuButton({ isOpen, onClick }: MobileMenuButtonProps) {
       )}
     </button>
   );
-}
+});

@@ -1,3 +1,4 @@
+import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
 interface SideNavLinkProps {
@@ -9,7 +10,7 @@ interface SideNavLinkProps {
   isCollapsed?: boolean;
 }
 
-export function SideNavLink({ 
+export const SideNavLink = React.memo(function SideNavLink({ 
   icon: Icon, 
   label, 
   isActive, 
@@ -22,7 +23,7 @@ export function SideNavLink({
       <button
         onClick={onClick}
         className={`
-          w-full flex items-center justify-center rounded-lg p-2.5 transition-all duration-200 relative
+          w-full flex items-center justify-center rounded-lg p-2.5 transition-all duration-200 relative will-change-transform
           ${isActive 
             ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
             : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -51,7 +52,7 @@ export function SideNavLink({
     <button
       onClick={onClick}
       className={`
-        w-full flex items-center justify-between rounded-lg py-2 px-3 transition-all duration-200
+        w-full flex items-center justify-between rounded-lg py-2 px-3 transition-all duration-200 will-change-transform
         ${isActive 
           ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -76,4 +77,4 @@ export function SideNavLink({
       )}
     </button>
   );
-}
+});

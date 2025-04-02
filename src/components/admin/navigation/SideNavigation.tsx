@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, ListTodo, Settings, LogOut, Megaphone, Moon, Sun,
   Book, GraduationCap, FileText, CalendarDays, User, LayoutDashboard,
@@ -17,7 +17,12 @@ interface SideNavigationProps {
   onCollapse?: (collapsed: boolean) => void;
 }
 
-export function SideNavigation({ activeTab, onTabChange, onLogout, onCollapse }: SideNavigationProps) {
+export const SideNavigation = React.memo(function SideNavigation({ 
+  activeTab, 
+  onTabChange, 
+  onLogout, 
+  onCollapse 
+}: SideNavigationProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isDark, toggle } = useTheme();
@@ -35,39 +40,49 @@ export function SideNavigation({ activeTab, onTabChange, onLogout, onCollapse }:
     return () => clearInterval(interval);
   }, []);
 
-  const mainNavItems = [
+  // Memoize navigation items to prevent rerenders
+  const mainNavItems = useMemo(() => [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'users' as const, label: 'Users', icon: Users, badge: 147 },
     { id: 'tasks' as const, label: 'Tasks', icon: ListTodo, badge: 56 },
     { id: 'due-tasks' as const, label: 'Due Tasks', icon: Clock, badge: 14 },
-  ];
+  ], []);
   
-  const managementNavItems = [
+  const managementNavItems = useMemo(() => [
     { id: 'announcements' as const, label: 'Announcements', icon: Megaphone },
     { id: 'teachers' as const, label: 'Teachers', icon: User },
     { id: 'courses' as const, label: 'Courses', icon: GraduationCap },
     { id: 'study-materials' as const, label: 'Study Materials', icon: Book },
     { id: 'routine' as const, label: 'Routine', icon: CalendarDays }
-  ];
+  ], []);
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(prev => !prev);
+  }, []);
 
-  const handleNavigation = (tab: AdminTab) => {
+  const closeMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(false);
+  }, []);
+
+  const handleNavigation = useCallback((tab: AdminTab) => {
     onTabChange(tab);
     setIsMobileMenuOpen(false);
-  };
+  }, [onTabChange]);
 
-  const toggleCollapse = () => {
-    const newCollapsedState = !isCollapsed;
-    setIsCollapsed(newCollapsedState);
-    
-    // Notify parent component of sidebar collapse state
-    if (onCollapse) {
-      onCollapse(newCollapsedState);
-    }
-  };
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => {
+      const newState = !prev;
+      // Notify parent component of sidebar collapse state
+      if (onCollapse) {
+        onCollapse(newState);
+      }
+      return newState;
+    });
+  }, [onCollapse]);
+
+  const handleThemeToggle = useCallback(() => {
+    toggle();
+  }, [toggle]);
 
   return (
     <>
@@ -75,14 +90,14 @@ export function SideNavigation({ activeTab, onTabChange, onLogout, onCollapse }:
 
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden dark:bg-opacity-70 backdrop-blur-sm"
-          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden dark:bg-opacity-70 backdrop-blur-sm will-change-transform"
+          onClick={closeMobileMenu}
         />
       )}
 
       <aside className={`
         fixed left-0 top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800
-        transform transition-all duration-300 ease-in-out z-40 shadow-sm
+        transform transition-all duration-300 ease-in-out z-40 shadow-sm will-change-transform
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
         ${isCollapsed ? 'w-20' : 'w-64'}
         lg:translate-x-0
@@ -207,7 +222,7 @@ export function SideNavigation({ activeTab, onTabChange, onLogout, onCollapse }:
               {!isCollapsed && (
                 <div className="flex items-center gap-1.5">
                   <button
-                    onClick={toggle}
+                    onClick={handleThemeToggle}
                     className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   >
                     {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -227,4 +242,4 @@ export function SideNavigation({ activeTab, onTabChange, onLogout, onCollapse }:
       </aside>
     </>
   );
-}
+});
