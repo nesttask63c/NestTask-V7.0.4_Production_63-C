@@ -58,7 +58,7 @@ export async function createTask(userId: string, task: NewTask, isAdmin: boolean
 
 export async function updateTask(taskId: string, updates: Partial<Task>) {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('tasks')
       .update({
         name: updates.name,
@@ -67,12 +67,16 @@ export async function updateTask(taskId: string, updates: Partial<Task>) {
         description: updates.description,
         status: updates.status,
       })
-      .eq('id', taskId);
+      .eq('id', taskId)
+      .select()
+      .single();
 
     if (error) {
       console.error('Error updating task:', error);
       throw new Error('Failed to update task');
     }
+    
+    return mapTaskFromDB(data);
   } catch (error) {
     console.error('Error updating task:', error);
     throw new Error('Failed to update task');

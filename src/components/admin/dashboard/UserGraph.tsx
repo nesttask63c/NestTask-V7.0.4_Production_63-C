@@ -742,56 +742,6 @@ export function UserGraph({
           </div>
         </div>
       </div>
-
-      {/* Legend and statistics panel */}
-      <div className="px-3 sm:px-6 pt-3 sm:pt-4 pb-4 sm:pb-5">
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          {/* Legend */}
-          <div className="px-3 sm:px-5 py-2 sm:py-3 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3 sm:gap-8 bg-gray-50 dark:bg-gray-850">
-            <div className="flex items-center">
-              <span className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-blue-500 mr-1.5 sm:mr-2"></span>
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Total users</span>
-            </div>
-            
-            <div className="flex items-center">
-              <span className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-emerald-500 mr-1.5 sm:mr-2" style={{ backgroundColor: "#10B981" }}></span>
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">New registrations</span>
-            </div>
-            
-            <div className="flex items-center">
-              <span className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-purple-500 mr-1.5 sm:mr-2" style={{ backgroundColor: "#8B5CF6" }}></span>
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Active users</span>
-            </div>
-            
-            {maxGrowthPoint !== null && (
-              <div className="flex items-center">
-                <span className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-pink-500 mr-1.5 sm:mr-2"></span>
-                <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Peak growth</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Statistics */}
-          {chartData.length > 0 && (
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center px-3 sm:px-5 py-3 sm:py-4 gap-2 sm:gap-3 bg-white dark:bg-gray-800">
-              <div className="flex flex-col">
-                <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex items-baseline gap-2">
-                  {chartData[chartData.length - 1].users.toLocaleString()}
-                  <span className="text-xs sm:text-sm font-medium text-gray-500">total users</span>
-                </div>
-              </div>
-
-              <div className="flex items-center bg-gray-50 dark:bg-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg">
-                <span className="text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm font-medium flex items-center">
-                  <ArrowUpRight className="w-3.5 sm:w-4 h-3.5 sm:h-4 mr-1 sm:mr-1.5" />
-                  +{totalNewUsers.toLocaleString()}
-                </span>
-                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 ml-1 sm:ml-1.5">new in this period</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 } 
