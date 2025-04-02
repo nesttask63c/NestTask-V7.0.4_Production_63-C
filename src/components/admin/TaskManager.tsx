@@ -304,21 +304,19 @@ export function TaskManager({
       {showTaskForm && (
         <TaskForm onSubmit={onCreateTask} />
       )}
+      
+      {/* Task Analytics - moved to appear after the task form */}
+      <div className="mb-6">
+        <TaskStats tasks={tasks} />
+      </div>
 
-      <div className="flex flex-col xl:grid xl:grid-cols-3 gap-4 md:gap-6">
-        {/* Task Analytics - shown first on mobile, but in the right column on desktop */}
-        <div className="order-first xl:order-last">
-          <TaskStats tasks={tasks} />
-        </div>
-        
-        {/* Task Table - shown second on mobile, but in the left/main column on desktop */}
-        <div className="order-last xl:order-first xl:col-span-2">
-          <TaskTable 
-            tasks={sortedTasks} 
-            onDeleteTask={onDeleteTask} 
-            onUpdateTask={onUpdateTask} 
-          />
-        </div>
+      {/* Task Table */}
+      <div>
+        <TaskTable 
+          tasks={sortedTasks} 
+          onDeleteTask={onDeleteTask} 
+          onUpdateTask={onUpdateTask} 
+        />
       </div>
     </div>
   );
